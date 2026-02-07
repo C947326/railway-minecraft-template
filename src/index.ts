@@ -1,0 +1,711 @@
+import { readdir, rm, stat } from "node:fs/promises";
+import { watch } from "node:fs";
+import path from "node:path";
+import index from "./index.html";
+import { status, statusLegacy } from "minecraft-server-util";
+import type { ServerWebSocket } from "bun";
+
+const FILES_ROOT = path.resolve(Bun.env.FILES_ROOT ?? "/data");
+const MAX_PREVIEW_BYTES = 200_000;
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+const CONSOLE_PIPE = Bun.env.MC_CONSOLE_PIPE ?? "/tmp/minecraft-console-in";
+const LOG_PATH = Bun.env.MC_LOG_PATH ?? "/data/logs/latest.log";
+const LOG_TAIL_BYTES = Number.parseInt(Bun.env.MC_LOG_TAIL_BYTES ?? "20000", 10);
+const LOG_POLL_MS = Number.parseInt(Bun.env.MC_LOG_POLL_MS ?? "1000", 10);
+const MC_SERVER_HOST = Bun.env.MC_SERVER_HOST ?? "127.0.0.1";
+const MC_SERVER_PORT = Number.parseInt(
+  Bun.env.MC_SERVER_PORT ?? Bun.env.SERVER_PORT ?? "25565",
+  10,
+);
+const MC_SERVER_PORT_SAFE = Number.isNaN(MC_SERVER_PORT) ? 25565 : MC_SERVER_PORT;
+const MC_STATUS_CACHE_MS = Number.parseInt(
+  Bun.env.MC_STATUS_CACHE_MS ?? "8000",
+  10,
+);
+const MC_STATUS_CACHE_MS_SAFE = Number.isNaN(MC_STATUS_CACHE_MS)
+  ? 8000
+  : Math.max(1000, MC_STATUS_CACHE_MS);
+const RAILWAY_TCP_PROXY_DOMAIN = Bun.env.RAILWAY_TCP_PROXY_DOMAIN ?? "";
+const RAILWAY_TCP_PROXY_PORT = Bun.env.RAILWAY_TCP_PROXY_PORT ?? "";
+const CONTROL_PORT = Number.parseInt(
+  Bun.env.CONTROL_PORT ?? Bun.env.APP_PORT ?? "3000",
+  10,
+);
+const CONTROL_PORT_SAFE = Number.isNaN(CONTROL_PORT) ? 3000 : CONTROL_PORT;
+
+const json = (data: unknown, init: ResponseInit = {}) =>
+  new Response(JSON.stringify(data), {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+
+const requireAuth = () => true;
+
+const isTruthy = (value: string | undefined) => {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+};
+
+const normalizeConsoleCommand = (command: string) =>
+  command.replace(/\r?\n/g, " ").trim();
+
+const getLogTailBytes = (value: string | null) => {
+  if (!value) return Number.isNaN(LOG_TAIL_BYTES) ? 20_000 : LOG_TAIL_BYTES;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) return Number.isNaN(LOG_TAIL_BYTES) ? 20_000 : LOG_TAIL_BYTES;
+  return Math.max(0, parsed);
+};
+
+const getLogPollMs = (value: string | null) => {
+  if (!value) return Number.isNaN(LOG_POLL_MS) ? 1000 : LOG_POLL_MS;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) return Number.isNaN(LOG_POLL_MS) ? 1000 : LOG_POLL_MS;
+  return Math.max(250, parsed);
+};
+
+type ConsoleLogSocketData = {
+  tailBytes: number;
+  position: number;
+  buffer: string;
+  watcher: ReturnType<typeof watch> | null;
+  interval: ReturnType<typeof setInterval> | null;
+  pumping: boolean;
+};
+
+type StatusSnapshot = {
+  host: string;
+  port: number;
+  publicAddress: string | null;
+  motd: string | null;
+  version: string | null;
+  latency: number | null;
+  players: {
+    online: number;
+    max: number;
+    sample: string[];
+  };
+};
+
+const createBaseStatusSnapshot = (): StatusSnapshot => ({
+  host: MC_SERVER_HOST,
+  port: MC_SERVER_PORT_SAFE,
+  publicAddress:
+    RAILWAY_TCP_PROXY_DOMAIN && RAILWAY_TCP_PROXY_PORT
+      ? `${RAILWAY_TCP_PROXY_DOMAIN}:${RAILWAY_TCP_PROXY_PORT}`
+      : null,
+  motd: null,
+  version: null,
+  latency: null,
+  players: { online: 0, max: 0, sample: [] },
+});
+
+let statusCache:
+  | {
+      data: StatusSnapshot;
+      fetchedAt: number;
+    }
+  | null = null;
+let statusInFlight: Promise<StatusSnapshot> | null = null;
+
+const normalizeMotd = (motd: unknown) => {
+  if (!motd) return null;
+  if (typeof motd === "string") return motd;
+  if (typeof motd === "object" && motd && "clean" in motd) {
+    const clean = (motd as { clean?: string | string[] }).clean;
+    if (Array.isArray(clean)) return clean.join(" ").trim();
+    if (typeof clean === "string") return clean.trim();
+  }
+  if (typeof motd === "object" && motd && "raw" in motd) {
+    const raw = (motd as { raw?: string | string[] }).raw;
+    if (Array.isArray(raw)) return raw.join(" ").trim();
+    if (typeof raw === "string") return raw.trim();
+  }
+  return null;
+};
+
+const extractVersionFromLog = (text: string) => {
+  const patterns = [
+    /Starting minecraft server version ([0-9][\w.\-]+)/i,
+    /Minecraft version ([0-9][\w.\-]+)/i,
+    /running (?:.+ )?version ([0-9][\w.\-]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+};
+
+const readLogTail = async (bytes = 25_000) => {
+  try {
+    const info = await stat(LOG_PATH);
+    if (!info.isFile()) return null;
+    const startAt = Math.max(0, info.size - bytes);
+    return await Bun.file(LOG_PATH).slice(startAt, info.size).text();
+  } catch {
+    return null;
+  }
+};
+
+const fetchServerStatus = async () => {
+  const now = Date.now();
+  if (statusCache && now - statusCache.fetchedAt < MC_STATUS_CACHE_MS_SAFE) {
+    return statusCache.data;
+  }
+  if (statusInFlight) return statusInFlight;
+
+  statusInFlight = (async () => {
+    const baseSnapshot = createBaseStatusSnapshot();
+
+    try {
+      const res = await status(MC_SERVER_HOST, MC_SERVER_PORT_SAFE, {
+        timeout: 2500,
+        enableSRV: true,
+      });
+
+      const snapshot: StatusSnapshot = {
+        ...baseSnapshot,
+        motd: normalizeMotd(res.motd),
+        version: res.version?.name ?? null,
+        latency:
+          typeof res.roundTripLatency === "number" ? res.roundTripLatency : null,
+        players: {
+          online: res.players?.online ?? 0,
+          max: res.players?.max ?? 0,
+          sample:
+            res.players?.sample?.map((player) => player.name).filter(Boolean) ?? [],
+        },
+      };
+
+      statusCache = { data: snapshot, fetchedAt: Date.now() };
+      statusInFlight = null;
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      let snapshot = { ...baseSnapshot };
+
+      if (message.includes("Unexpected server MOTD type")) {
+        // Try legacy ping to recover version/player data.
+        try {
+          const legacy = await statusLegacy(MC_SERVER_HOST, MC_SERVER_PORT_SAFE, {
+            timeout: 2500,
+          });
+          snapshot = {
+            ...snapshot,
+            motd: normalizeMotd(legacy.motd),
+            version: legacy.version?.name ?? null,
+            players: {
+              online: legacy.players?.online ?? 0,
+              max: legacy.players?.max ?? 0,
+              sample: [],
+            },
+          };
+        } catch {
+          // Fall through to log-based version extraction.
+        }
+      } else {
+        throw error;
+      }
+
+      if (!snapshot.version) {
+        const tail = await readLogTail();
+        if (tail) {
+          snapshot = { ...snapshot, version: extractVersionFromLog(tail) };
+        }
+      }
+
+      statusCache = { data: snapshot, fetchedAt: Date.now() };
+      statusInFlight = null;
+      return snapshot;
+    }
+
+  })();
+
+  try {
+    return await statusInFlight;
+  } finally {
+    statusInFlight = null;
+  }
+};
+
+const sendLogLine = (ws: ServerWebSocket<ConsoleLogSocketData>, line: string) => {
+  try {
+    ws.send(line);
+  } catch {
+    // ignore
+  }
+};
+
+const pumpLog = async (
+  ws: ServerWebSocket<ConsoleLogSocketData>,
+  opts: { resetToTail?: boolean } = {},
+) => {
+  if (ws.data.pumping) return;
+  ws.data.pumping = true;
+  try {
+    let info;
+    try {
+      info = await stat(LOG_PATH);
+    } catch {
+      return;
+    }
+
+    if (!info.isFile()) return;
+
+    if (opts.resetToTail) {
+      ws.data.position = Math.max(0, info.size - ws.data.tailBytes);
+      ws.data.buffer = "";
+    }
+
+    if (info.size < ws.data.position) {
+      // Log rotated/truncated.
+      ws.data.position = Math.max(0, info.size - ws.data.tailBytes);
+      ws.data.buffer = "";
+    }
+
+    if (info.size === ws.data.position) return;
+
+    const chunk = await Bun.file(LOG_PATH).slice(ws.data.position, info.size).text();
+    ws.data.position = info.size;
+    ws.data.buffer += chunk;
+
+    const lines = ws.data.buffer.split(/\r?\n/);
+    ws.data.buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      sendLogLine(ws, line);
+    }
+  } finally {
+    ws.data.pumping = false;
+  }
+};
+
+const normalizeRelativePath = (value: string | null) => {
+  const raw = value ?? "/";
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeadingSlash.replace(/\/+/g, "/");
+};
+
+const resolveSafePath = (value: string | null) => {
+  const relative = normalizeRelativePath(value);
+  const resolved = path.resolve(FILES_ROOT, `.${relative}`);
+  const rootWithSep = FILES_ROOT.endsWith(path.sep)
+    ? FILES_ROOT
+    : `${FILES_ROOT}${path.sep}`;
+
+  if (resolved !== FILES_ROOT && !resolved.startsWith(rootWithSep)) {
+    throw new Error("Invalid path.");
+  }
+
+  return { relative, resolved };
+};
+
+const ensureAuth = () => {
+  if (!requireAuth()) {
+    return json({ error: "Unauthorized." }, { status: 401 });
+  }
+  return null;
+};
+
+const server = Bun.serve({
+  port: CONTROL_PORT_SAFE,
+  maxRequestBodySize: MAX_UPLOAD_BYTES,
+  routes: {
+    "/api/files": {
+      GET: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        try {
+          const { searchParams } = new URL(req.url);
+          const { relative, resolved } = resolveSafePath(
+            searchParams.get("path"),
+          );
+          const info = await stat(resolved);
+          if (!info.isDirectory()) {
+            return json({ error: "Path is not a folder." }, { status: 400 });
+          }
+
+          const entries = await readdir(resolved, { withFileTypes: true });
+          const items = await Promise.all(
+            entries.map(async (entry) => {
+              const fullPath = path.join(resolved, entry.name);
+              const info = await stat(fullPath);
+              return {
+                name: entry.name,
+                path: path.posix.join(relative, entry.name),
+                type: entry.isDirectory() ? "dir" : "file",
+                size: info.size,
+                mtime: info.mtime.toISOString(),
+              };
+            }),
+          );
+
+          items.sort((a, b) => {
+            if (a.type !== b.type) {
+              return a.type === "dir" ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+          });
+
+          return json({ path: relative, entries: items });
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : "List failed." },
+            { status: 400 },
+          );
+        }
+      },
+      DELETE: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        try {
+          const { searchParams } = new URL(req.url);
+          const { relative, resolved } = resolveSafePath(
+            searchParams.get("path"),
+          );
+          if (resolved === FILES_ROOT) {
+            return json({ error: "Refusing to delete root." }, { status: 400 });
+          }
+
+          const targetInfo = await stat(resolved);
+          if (targetInfo.isDirectory()) {
+            await rm(resolved, { recursive: true, force: true });
+          } else {
+            await rm(resolved, { force: true });
+          }
+
+          return json({ ok: true, path: relative });
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : "Delete failed." },
+            { status: 400 },
+          );
+        }
+      },
+    },
+    "/api/files/content": {
+      GET: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        try {
+          const { searchParams } = new URL(req.url);
+          const { relative, resolved } = resolveSafePath(
+            searchParams.get("path"),
+          );
+          const info = await stat(resolved);
+
+          if (!info.isFile()) {
+            return json({ error: "Path is not a file." }, { status: 400 });
+          }
+
+          if (info.size > MAX_PREVIEW_BYTES) {
+            return json(
+              { error: "File too large to preview." },
+              { status: 413 },
+            );
+          }
+
+          const file = Bun.file(resolved);
+          const sample = new Uint8Array(
+            await file.slice(0, 1024).arrayBuffer(),
+          );
+
+          if (sample.includes(0)) {
+            return json(
+              { error: "Binary file preview is not supported." },
+              { status: 415 },
+            );
+          }
+
+          const content = await file.text();
+          return json({ path: relative, content });
+        } catch (error) {
+          return json(
+            {
+              error: error instanceof Error ? error.message : "Preview failed.",
+            },
+            { status: 400 },
+          );
+        }
+      },
+    },
+    "/api/files/upload": {
+      POST: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        try {
+          const { searchParams } = new URL(req.url);
+          const { relative, resolved } = resolveSafePath(
+            searchParams.get("path"),
+          );
+          const fileNameHeader = req.headers.get("x-file-name");
+          const safeName = path.basename(fileNameHeader || "upload.bin");
+          const destinationRelative = path.posix.join(relative, safeName);
+          const { resolved: destination } = resolveSafePath(destinationRelative);
+
+          if (!req.body) {
+            return json({ error: "Missing upload body." }, { status: 400 });
+          }
+
+          const response = new Response(req.body);
+          await Bun.write(destination, response);
+
+          return json({ ok: true, path: destinationRelative });
+        } catch (error) {
+          return json(
+            {
+              error: error instanceof Error ? error.message : "Upload failed.",
+            },
+            { status: 400 },
+          );
+        }
+      },
+    },
+    "/api/console": {
+      POST: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        try {
+          const body = (await req.json()) as { command?: string };
+          const command = normalizeConsoleCommand(body.command ?? "");
+
+          if (!command) {
+            return json({ error: "Command is required." }, { status: 400 });
+          }
+
+          if (!isTruthy(Bun.env.CREATE_CONSOLE_IN_PIPE)) {
+            return json(
+              {
+                error:
+                  "CREATE_CONSOLE_IN_PIPE must be set to true to use the console pipe.",
+              },
+              { status: 400 },
+            );
+          }
+
+          const info = await stat(CONSOLE_PIPE);
+          if (!info.isFIFO()) {
+            return json(
+              { error: "Console pipe is not available." },
+              { status: 400 },
+            );
+          }
+
+          await Bun.write(CONSOLE_PIPE, `${command}\n`);
+          return json({ ok: true });
+        } catch (error) {
+          return json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Console command failed.",
+            },
+            { status: 400 },
+          );
+        }
+      },
+    },
+    "/api/server/status": {
+      GET: async () => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+        try {
+          const data = await fetchServerStatus();
+          const cached =
+            statusCache &&
+            Date.now() - statusCache.fetchedAt < MC_STATUS_CACHE_MS_SAFE + 250;
+          return json({
+            ok: true,
+            data,
+            cached,
+            fetchedAt: statusCache?.fetchedAt ?? Date.now(),
+          });
+        } catch (error) {
+          if (statusCache) {
+            return json({
+              ok: true,
+              data: statusCache.data,
+              cached: true,
+              stale: true,
+              error: error instanceof Error ? error.message : "Status ping failed.",
+              fetchedAt: statusCache.fetchedAt,
+            });
+          }
+          return json({
+            ok: true,
+            data: createBaseStatusSnapshot(),
+            cached: false,
+            stale: true,
+            error: error instanceof Error ? error.message : "Status ping failed.",
+            fetchedAt: Date.now(),
+          });
+        }
+      },
+    },
+    "/api/console/ws": {
+      GET: (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        const { searchParams } = new URL(req.url);
+        const tailBytes = getLogTailBytes(searchParams.get("tail"));
+
+        const upgraded = server.upgrade(req, {
+          data: {
+            tailBytes,
+            position: 0,
+            buffer: "",
+            watcher: null,
+            interval: null,
+            pumping: false,
+          } satisfies ConsoleLogSocketData,
+        });
+
+        if (upgraded) return;
+        return new Response("Upgrade failed.", { status: 400 });
+      },
+    },
+    "/api/console/logs": {
+      GET: async (req) => {
+        const authError = ensureAuth();
+        if (authError) return authError;
+
+        const { searchParams } = new URL(req.url);
+        const tailBytes = getLogTailBytes(searchParams.get("tail"));
+        const pollMs = getLogPollMs(searchParams.get("poll"));
+
+        let buffer = "";
+        let position = 0;
+        let closed = false;
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const stream = new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder();
+
+            const sendLine = (line: string) => {
+              controller.enqueue(encoder.encode(`data: ${line}\n\n`));
+            };
+
+            const sendComment = (value: string) => {
+              controller.enqueue(encoder.encode(`: ${value}\n\n`));
+            };
+
+            const pump = async () => {
+              if (closed) return;
+              try {
+                let info;
+                try {
+                  info = await stat(LOG_PATH);
+                } catch {
+                  return;
+                }
+
+                if (!info.isFile()) {
+                  return;
+                }
+
+                if (info.size < position) {
+                  position = 0;
+                  buffer = "";
+                }
+
+                if (info.size === position) {
+                  return;
+                }
+
+                const chunk = await Bun.file(LOG_PATH)
+                  .slice(position, info.size)
+                  .text();
+                position = info.size;
+                buffer += chunk;
+
+                const lines = buffer.split(/\r?\n/);
+                buffer = lines.pop() ?? "";
+                for (const line of lines) {
+                  sendLine(line);
+                }
+              } catch {
+                return;
+              }
+            };
+
+            const init = async () => {
+              sendComment("connected");
+              try {
+                const info = await stat(LOG_PATH);
+                if (info.isFile()) {
+                  const startAt = Math.max(0, info.size - tailBytes);
+                  position = startAt;
+                  await pump();
+                }
+              } catch {
+                // File may not be ready yet; keep polling.
+              }
+              interval = setInterval(() => {
+                void pump();
+              }, pollMs);
+            };
+
+            void init();
+          },
+          cancel() {
+            closed = true;
+            if (interval) clearInterval(interval);
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        });
+      },
+    },
+    "/*": index,
+  },
+  websocket: {
+    open(ws) {
+      // Only the /api/console/ws route upgrades with our data shape.
+      const data = ws.data as ConsoleLogSocketData;
+      if (!data || typeof data.tailBytes !== "number") return;
+
+      void pumpLog(ws as ServerWebSocket<ConsoleLogSocketData>, { resetToTail: true });
+
+      // Prefer filesystem events; keep a slow interval as a reliability backstop.
+      try {
+        data.watcher = watch(
+          LOG_PATH,
+          { persistent: false },
+          () => void pumpLog(ws as ServerWebSocket<ConsoleLogSocketData>),
+        );
+      } catch {
+        data.watcher = null;
+      }
+
+      data.interval = setInterval(() => {
+        void pumpLog(ws as ServerWebSocket<ConsoleLogSocketData>);
+      }, Math.max(750, LOG_POLL_MS));
+    },
+    close(ws) {
+      const data = ws.data as ConsoleLogSocketData;
+      if (!data) return;
+      if (data.interval) clearInterval(data.interval);
+      data.interval = null;
+      if (data.watcher) data.watcher.close();
+      data.watcher = null;
+    },
+  },
+});
+
+console.log(`🚀 Server running at ${server.url}`);

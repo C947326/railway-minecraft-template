@@ -1,0 +1,38 @@
+{
+  "name": "bun-hello-world",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "dev:css": "bunx tailwindcss -c tailwind.config.ts -i src/index.css -o src/tailwind.css --watch",
+    "build:css": "bunx tailwindcss -c tailwind.config.ts -i src/index.css -o src/tailwind.css --minify",
+    "build": "bun run build:css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "start": "NODE_ENV=production bun src/index.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "ghostty-web": "^0.4.0",
+    "lucide-react": "^0.563.0",
+    "minecraft-server-util": "^5.4.4",
+    "react": "^19",
+    "react-dom": "^19",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "3",
+    "tailwindcss-animate": "^1.0.7"
+  }
+}
