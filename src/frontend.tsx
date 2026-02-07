@@ -210,8 +210,10 @@ function App() {
         fitAddonRef.current = fitAddon;
         term.open(terminalRef.current);
         requestAnimationFrame(() => fitAddon.fit());
+        const prompt = "server> ";
+        const writePrompt = () => term.write(prompt);
         term.write("Console ready.\r\n");
-        term.write("console> ");
+        writePrompt();
         term.onData((data) => {
           const activeTerm = terminalInstanceRef.current;
           if (!activeTerm) return;
@@ -221,6 +223,7 @@ function App() {
               inputBufferRef.current = "";
               activeTerm.write("\r\n");
               void sendCommand(commandText);
+              writePrompt();
               continue;
             }
             if (chunk === "\u007f" || chunk === "\b") {
@@ -575,6 +578,7 @@ function App() {
     inputBufferRef.current = "";
     term.write(`\r\n› ${command}\r\n`);
     void sendCommand(command);
+    term.write("server> ");
   };
 
   const runPlayers = () => runMacro("list");
