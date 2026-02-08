@@ -136,6 +136,19 @@ function App() {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputBufferRef = useRef("");
   const logStreamRef = useRef<WebSocket | null>(null);
+  const prompt = "server> ";
+
+  const writePrompt = (term: Terminal) => {
+    term.write(prompt);
+  };
+
+  const writeLogLine = (line: string) => {
+    const term = terminalInstanceRef.current;
+    if (!term) return;
+    term.write("\r\x1b[2K");
+    term.write(line.length ? `${line}\r\n` : "\r\n");
+    term.write(`${prompt}${inputBufferRef.current}`);
+  };
 
   const breadcrumbs = useMemo(() => {
     const parts = currentPath.split("/").filter(Boolean);
@@ -210,10 +223,8 @@ function App() {
         fitAddonRef.current = fitAddon;
         term.open(terminalRef.current);
         requestAnimationFrame(() => fitAddon.fit());
-        const prompt = "server> ";
-        const writePrompt = () => term.write(prompt);
         term.write("Console ready.\r\n");
-        writePrompt();
+        writePrompt(term);
         term.onData((data) => {
           const activeTerm = terminalInstanceRef.current;
           if (!activeTerm) return;
@@ -222,8 +233,8 @@ function App() {
               const commandText = inputBufferRef.current;
               inputBufferRef.current = "";
               activeTerm.write("\r\n");
-              void sendCommand(commandText);
-              writePrompt();
+              void sendCommand(commandText, { rePrompt: false });
+              writePrompt(activeTerm);
               continue;
             }
             if (chunk === "\u007f" || chunk === "\b") {
@@ -271,19 +282,13 @@ function App() {
 
       ws.onopen = () => {
         retry = 0;
-        terminalInstanceRef.current?.write("Console log stream connected.\r\n");
+        writeLogLine("Console log stream connected.");
         setLogStatus("connected");
       };
 
       ws.onmessage = (event) => {
-        const term = terminalInstanceRef.current;
-        if (!term) return;
         const line = typeof event.data === "string" ? event.data : "";
-        if (line.length === 0) {
-          term.write("\r\n");
-          return;
-        }
-        term.write(`${line}\r\n`);
+        writeLogLine(line);
 
         const players = extractPlayersFromLogLine(line);
         if (players) {
@@ -524,12 +529,16 @@ function App() {
     }
   };
 
-  const sendCommand = async (rawCommand: string) => {
+  const sendCommand = async (
+    rawCommand: string,
+    options: { rePrompt?: boolean } = {},
+  ) => {
     const term = terminalInstanceRef.current;
     const commandText = rawCommand.trim();
     if (!term) return;
+    const shouldPrompt = options.rePrompt ?? true;
     if (!commandText) {
-      term.write("console> ");
+      if (shouldPrompt) writePrompt(term);
       return;
     }
     try {
@@ -542,15 +551,16 @@ function App() {
       if (!res.ok) {
         throw new Error(data.error ?? "Console command failed.");
       }
-      term.write("console> ");
     } catch (err) {
-      term.write(
-        `${
-          err instanceof Error ? err.message : "Console request failed."
-        }\r\nconsole> `,
-      );
-    } finally {
+      const message = err instanceof Error ? err.message : "Console request failed.";
+      if (shouldPrompt) {
+        term.write(`${message}\r\n`);
+      } else {
+        writeLogLine(message);
+        return;
+      }
     }
+    if (shouldPrompt) writePrompt(term);
   };
 
   const dotClass =
@@ -577,8 +587,8 @@ function App() {
     if (!term) return;
     inputBufferRef.current = "";
     term.write(`\r\n› ${command}\r\n`);
-    void sendCommand(command);
-    term.write("server> ");
+    void sendCommand(command, { rePrompt: false });
+    writePrompt(term);
   };
 
   const runPlayers = () => runMacro("list");
