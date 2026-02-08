@@ -21,7 +21,7 @@
     "clsx": "^2.1.1",
     "ghostty-web": "^0.4.0",
     "lucide-react": "^0.563.0",
-    "minecraft-server-util": "^5.4.4",
+    "minecraftstatuspinger": "^1.2.2",
     "react": "^19",
     "react-dom": "^19",
     "tailwind-merge": "^3.4.0"

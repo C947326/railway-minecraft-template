@@ -2,7 +2,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import { watch } from "node:fs";
 import path from "node:path";
 import index from "./index.html";
-import { status, statusLegacy } from "minecraft-server-util";
+import mc from "minecraftstatuspinger";
 import type { ServerWebSocket } from "bun";
 
 const FILES_ROOT = path.resolve(Bun.env.FILES_ROOT ?? "/data");
@@ -126,6 +126,17 @@ const normalizeMotd = (motd: unknown) => {
   return null;
 };
 
+const parseStatusPayload = (statusRaw: string) => {
+  try {
+    return JSON.parse(statusRaw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const getStatusPayload = (payload: { status: Record<string, unknown> | null; statusRaw: string }) =>
+  payload.status ?? parseStatusPayload(payload.statusRaw);
+
 const extractVersionFromLog = (text: string) => {
   const patterns = [
     /Starting minecraft server version ([0-9][\w.\-]+)/i,
@@ -161,22 +172,51 @@ const fetchServerStatus = async () => {
     const baseSnapshot = createBaseStatusSnapshot();
 
     try {
-      const res = await status(MC_SERVER_HOST, MC_SERVER_PORT_SAFE, {
+      const res = await mc.lookup({
+        host: MC_SERVER_HOST,
+        port: MC_SERVER_PORT_SAFE,
         timeout: 2500,
-        enableSRV: true,
+        ping: true,
+        SRVLookup: true,
+        JSONParse: true,
+        throwOnParseError: false,
       });
+      const statusPayload = getStatusPayload(res);
+      if (!statusPayload) {
+        throw new Error("Server status unavailable");
+      }
 
       const snapshot: StatusSnapshot = {
         ...baseSnapshot,
-        motd: normalizeMotd(res.motd),
-        version: res.version?.name ?? null,
-        latency:
-          typeof res.roundTripLatency === "number" ? res.roundTripLatency : null,
+        motd: normalizeMotd(statusPayload.description ?? statusPayload.motd),
+        version:
+          (statusPayload.version &&
+          typeof statusPayload.version === "object" &&
+          "name" in statusPayload.version
+            ? (statusPayload.version as { name?: string }).name
+            : statusPayload.version) ?? null,
+        latency: typeof res.latency === "number" ? res.latency : null,
         players: {
-          online: res.players?.online ?? 0,
-          max: res.players?.max ?? 0,
+          online:
+            (statusPayload.players &&
+            typeof statusPayload.players === "object" &&
+            "online" in statusPayload.players
+              ? Number((statusPayload.players as { online?: number }).online ?? 0)
+              : 0) ?? 0,
+          max:
+            (statusPayload.players &&
+            typeof statusPayload.players === "object" &&
+            "max" in statusPayload.players
+              ? Number((statusPayload.players as { max?: number }).max ?? 0)
+              : 0) ?? 0,
           sample:
-            res.players?.sample?.map((player) => player.name).filter(Boolean) ?? [],
+            statusPayload.players &&
+            typeof statusPayload.players === "object" &&
+            Array.isArray((statusPayload.players as { sample?: unknown }).sample)
+              ? (statusPayload.players as { sample?: Array<{ name?: string } | string> }).sample
+                  ?.map((player) => (typeof player === "string" ? player : player.name))
+                  .filter((value): value is string => Boolean(value))
+              : [],
         },
       };
 
@@ -184,31 +224,9 @@ const fetchServerStatus = async () => {
       statusInFlight = null;
       return snapshot;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       let snapshot = { ...baseSnapshot };
 
-      if (message.includes("Unexpected server MOTD type")) {
-        // Try legacy ping to recover version/player data.
-        try {
-          const legacy = await statusLegacy(MC_SERVER_HOST, MC_SERVER_PORT_SAFE, {
-            timeout: 2500,
-          });
-          snapshot = {
-            ...snapshot,
-            motd: normalizeMotd(legacy.motd),
-            version: legacy.version?.name ?? null,
-            players: {
-              online: legacy.players?.online ?? 0,
-              max: legacy.players?.max ?? 0,
-              sample: [],
-            },
-          };
-        } catch {
-          // Fall through to log-based version extraction.
-        }
-      } else {
-        throw error;
-      }
+      // No protocol fallback available; rely on log-based version extraction.
 
       if (!snapshot.version) {
         const tail = await readLogTail();

@@ -14,7 +14,7 @@
         "clsx": "^2.1.1",
         "ghostty-web": "^0.4.0",
         "lucide-react": "^0.563.0",
-        "minecraft-server-util": "^5.4.4",
+        "minecraftstatuspinger": "^1.2.2",
         "react": "^19",
         "react-dom": "^19",
         "tailwind-merge": "^3.4.0",
@@ -195,9 +195,7 @@
 
     "micromatch": ["micromatch@4.0.8", "", { "dependencies": { "braces": "^3.0.3", "picomatch": "^2.3.1" } }, "sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA=="],
 
-    "minecraft-motd-util": ["minecraft-motd-util@1.1.12", "", {}, "sha512-5TuTRjrRupSTruea0nRC37r0FdhkS1O4wIJKAYfwJRCQd/X4Zyl/dVIs96h9UVW6N8jhIuz9pNkrDsqyN7VBdA=="],
-
-    "minecraft-server-util": ["minecraft-server-util@5.4.4", "", { "dependencies": { "minecraft-motd-util": "^1.1.9" } }, "sha512-uaE0N9PHPtJudi8BlCvKDD9K30w23ZpeS1I53wEJo9nX0HSmg5qFvwj8gMG0CYCUwWH/g5hjKaGAwXXN/vhMJw=="],
+    "minecraftstatuspinger": ["minecraftstatuspinger@1.2.2", "", {}, "sha512-3PDWcifjw6cliGnGqw0+nJVWWPOcpLDyNLh4D84vCNzPD2h9REbN5Ne11I//CMkIu5xJiIuyGwI44gyRYYbpuw=="],
 
     "mz": ["mz@2.7.0", "", { "dependencies": { "any-promise": "^1.0.0", "object-assign": "^4.0.1", "thenify-all": "^1.0.0" } }, "sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q=="],
 
