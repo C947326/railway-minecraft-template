@@ -71,6 +71,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<"console" | "files">("console");
 
   const [query, setQuery] = useState("");
+  const [playerQuery, setPlayerQuery] = useState("");
   const [copied, setCopied] = useState(false);
 
   const [terminalReady, setTerminalReady] = useState(false);
@@ -561,6 +562,12 @@ function App() {
     return [];
   }, [serverStatus]);
 
+  const filteredPlayers = useMemo(() => {
+    const q = playerQuery.trim().toLowerCase();
+    if (!q) return playerList;
+    return playerList.filter((name) => name.toLowerCase().includes(q));
+  }, [playerList, playerQuery]);
+
   const playerCountLabel = useMemo(() => {
     if (serverStatus) {
       return `${serverStatus.players.online}/${serverStatus.players.max}`;
@@ -722,28 +729,39 @@ function App() {
                 </div>
 
                 <div className="dash-bodypad space-y-3">
+                  <input
+                    value={playerQuery}
+                    onChange={(event) => setPlayerQuery(event.target.value)}
+                    placeholder="Search players…"
+                    className="h-10 w-full rounded-2xl border border-border/70 bg-background/35 px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+
                   {playerList.length ? (
-                    <div className="grid gap-2">
-                      {playerList.map((name) => (
-                        <div
-                          key={name}
-                          className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/30 px-3 py-2"
-                        >
-                          <div className="min-w-0 truncate text-sm text-foreground/95">
-                            {name}
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 shrink-0 rounded-full bg-background px-4"
-                            onClick={() => runMacro(`op ${name}`)}
-                            disabled={!terminalReady}
+                    filteredPlayers.length ? (
+                      <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                        {filteredPlayers.map((name) => (
+                          <div
+                            key={name}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/30 px-3 py-2"
                           >
-                            OP
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+                            <div className="min-w-0 truncate text-sm text-foreground/95">
+                              {name}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 shrink-0 rounded-full bg-background px-4"
+                              onClick={() => runMacro(`op ${name}`)}
+                              disabled={!terminalReady}
+                            >
+                              OP
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="dash-mutedbox">No matching players.</div>
+                    )
                   ) : (
                     <div className="dash-mutedbox">No players detected.</div>
                   )}
