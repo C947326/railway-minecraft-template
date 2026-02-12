@@ -1,7 +1,15 @@
 import "./tailwind.css";
-import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +27,7 @@ import {
   Copy,
   Folder,
   FileText,
+  LogOut,
   Users,
   RefreshCw,
   Terminal as TerminalIcon,
@@ -55,7 +64,114 @@ if (!root) {
   throw new Error("Root element not found.");
 }
 
+function LoginPage({
+  authError,
+  onSignIn,
+}: {
+  authError: string | null;
+  onSignIn: () => void;
+}) {
+  return (
+    <div className="min-h-screen dash-bg text-foreground">
+      <div className="mx-auto flex min-h-screen w-full max-w-lg items-center px-6 py-12">
+        <div className="w-full space-y-5 dash-appear">
+          <div className="space-y-3 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/60 shadow-sm">
+              <TerminalIcon className="h-5 w-5 text-primary" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="dash-kicker">Minecraft Control</div>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                Server Dashboard
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Console, files, and status — all in one place.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-2">
+              <span className="dash-chip">
+                <TerminalIcon className="h-4 w-4 opacity-75" />
+                Console
+              </span>
+              <span className="dash-chip">
+                <Folder className="h-4 w-4 opacity-75" />
+                Files
+              </span>
+              <span className="dash-chip">
+                <Users className="h-4 w-4 opacity-75" />
+                Players
+              </span>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Card className="relative w-full overflow-hidden border-border/80 bg-card/95">
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,hsla(0,0%,100%,0.06),transparent_22%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(hsla(0,0%,100%,0.03)_1px,transparent_1px)] [background-size:28px_28px] opacity-50" />
+
+              <CardHeader className="relative">
+                <CardTitle>Sign in</CardTitle>
+                <CardDescription>
+                  Open the dashboard to manage your server.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="relative space-y-4">
+                {authError ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {authError}
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    What you can do
+                  </div>
+                  <ul className="space-y-2 text-sm text-foreground/90">
+                    <li className="flex items-center gap-2">
+                      <TerminalIcon className="h-4 w-4 opacity-75" />
+                      Send console commands and watch logs
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Folder className="h-4 w-4 opacity-75" />
+                      Browse, preview, upload, and delete files
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Users className="h-4 w-4 opacity-75" />
+                      Check status and players
+                    </li>
+                  </ul>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  You’ll be redirected to sign in, then brought back here.
+                </p>
+              </CardContent>
+
+              <CardFooter className="relative flex-col items-stretch gap-3">
+                <Button className="w-full" onClick={onSignIn}>
+                  Sign in
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Tip: once inside, press <kbd className="dash-key">/</kbd> to search files.
+                </p>
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authUserName, setAuthUserName] = useState("Player");
+  const [authUserPicture, setAuthUserPicture] = useState<string | null>(null);
   const [currentPath, setCurrentPath] = useState("/");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -108,6 +224,24 @@ function App() {
   const logStreamRef = useRef<WebSocket | null>(null);
   const prompt = "server> ";
 
+  const markUnauthenticated = useCallback((message?: string) => {
+    setIsAuthenticated(false);
+    setAuthLoading(false);
+    if (message) setAuthError(message);
+  }, []);
+
+  const apiFetch = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const res = await fetch(input, init);
+      if (res.status === 401) {
+        markUnauthenticated("Session expired. Please sign in again.");
+        throw new Error("Unauthorized.");
+      }
+      return res;
+    },
+    [markUnauthenticated],
+  );
+
   const writePrompt = (term: Terminal) => {
     term.write(prompt);
   };
@@ -138,8 +272,71 @@ function App() {
   }, [entries, query]);
 
   useEffect(() => {
-    void fetchEntries("/");
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      setAuthLoading(true);
+      try {
+        const currentUrl = new URL(window.location.href);
+        const errorFromRedirect = currentUrl.searchParams.get("auth_error");
+        if (errorFromRedirect) {
+          setAuthError(errorFromRedirect);
+          currentUrl.searchParams.delete("auth_error");
+          window.history.replaceState({}, "", currentUrl.toString());
+        }
+
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) {
+          if (cancelled) return;
+          setIsAuthenticated(false);
+          setAuthUserName("Player");
+          setAuthUserPicture(null);
+          return;
+        }
+        const payload = (await res.json()) as
+          | { ok: true; user?: { name?: string | null; picture?: string | null } }
+          | { ok?: false; error?: string };
+        if (cancelled) return;
+        setIsAuthenticated(true);
+        const nextName =
+          "user" in payload &&
+          payload.user &&
+          typeof payload.user.name === "string" &&
+          payload.user.name.trim().length > 0
+            ? payload.user.name
+            : "Player";
+        const nextPicture =
+          "user" in payload &&
+          payload.user &&
+          typeof payload.user.picture === "string" &&
+          payload.user.picture.trim().length > 0
+            ? payload.user.picture
+            : null;
+        setAuthUserName(nextName);
+        setAuthUserPicture(nextPicture);
+        setAuthError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setIsAuthenticated(false);
+        setAuthUserName("Player");
+        setAuthUserPicture(null);
+        setAuthError(error instanceof Error ? error.message : "Auth check failed.");
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    };
+
+    void checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void fetchEntries("/");
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -166,6 +363,7 @@ function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
     const setupTerminal = async () => {
       if (!terminalRef.current || terminalInstanceRef.current) return;
@@ -193,7 +391,6 @@ function App() {
         fitAddonRef.current = fitAddon;
         term.open(terminalRef.current);
         requestAnimationFrame(() => fitAddon.fit());
-        term.write("Console ready.\r\n");
         writePrompt(term);
         term.onData((data) => {
           const activeTerm = terminalInstanceRef.current;
@@ -231,9 +428,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     if (!terminalReady || !terminalInstanceRef.current) return;
     let cancelled = false;
     let retry = 0;
@@ -252,7 +450,6 @@ function App() {
 
       ws.onopen = () => {
         retry = 0;
-        writeLogLine("Console log stream connected.");
         setLogStatus("connected");
       };
 
@@ -283,15 +480,16 @@ function App() {
       logStreamRef.current?.close();
       logStreamRef.current = null;
     };
-  }, [terminalReady]);
+  }, [isAuthenticated, terminalReady]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
     let timer: number | null = null;
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch("/api/server/status");
+        const res = await apiFetch("/api/server/status");
         const payload = (await res.json()) as
           | {
               ok: true;
@@ -343,7 +541,7 @@ function App() {
       cancelled = true;
       if (timer) window.clearInterval(timer);
     };
-  }, []);
+  }, [apiFetch, isAuthenticated]);
 
   useEffect(() => {
     if (activeTab !== "console") return;
@@ -369,7 +567,7 @@ function App() {
     setPreviewError(null);
     setQuery("");
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+      const res = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`);
       const data = (await res.json()) as { entries?: FileEntry[]; error?: string };
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to load directory.");
@@ -388,7 +586,7 @@ function App() {
     setPreviewError(null);
     setPreviewLoading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/files/content?path=${encodeURIComponent(entry.path)}`,
       );
       const data = (await res.json()) as { content?: string; error?: string };
@@ -444,7 +642,7 @@ function App() {
           void reader.cancel(reason);
         },
       });
-      const res = await fetch(uploadPath, {
+      const res = await apiFetch(uploadPath, {
         method: "POST",
         headers: {
           "Content-Type": file.type || "application/octet-stream",
@@ -473,7 +671,7 @@ function App() {
     if (!deleteTarget) return;
     setError(null);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/files?path=${encodeURIComponent(deleteTarget.path)}`,
         { method: "DELETE" },
       );
@@ -506,7 +704,7 @@ function App() {
       return;
     }
     try {
-      const res = await fetch("/api/console", {
+      const res = await apiFetch("/api/console", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: commandText }),
@@ -575,6 +773,39 @@ function App() {
     return "—";
   }, [serverStatus]);
 
+  const handleSignIn = () => {
+    window.location.href = "/api/auth/redirect";
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore network errors; local sign-out state still applies
+    }
+    setIsAuthenticated(false);
+    setAuthUserName("Player");
+    setAuthUserPicture(null);
+    setAuthError(null);
+  };
+
+  const userInitial = useMemo(() => authUserName.trim().charAt(0).toUpperCase() || "P", [authUserName]);
+
+  if (authLoading) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-background"
+        aria-label="Loading"
+      >
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage authError={authError} onSignIn={handleSignIn} />;
+  }
+
   return (
     <div className="min-h-screen dash-bg text-foreground">
       <div className="dash-shell dash-appear">
@@ -587,6 +818,32 @@ function App() {
               and send console commands. Press <kbd className="dash-key">/</kbd> to
               search files.
             </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/35 px-3 py-2">
+            {authUserPicture ? (
+              <img
+                src={authUserPicture}
+                alt={`${authUserName} avatar`}
+                className="h-9 w-9 rounded-full border border-border/70 object-cover"
+              />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+                {userInitial}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground">{authUserName}</div>
+              <div className="text-xs text-muted-foreground">Logged in</div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full bg-background/40 px-3"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4 opacity-80" />
+              Logout
+            </Button>
           </div>
         </header>
 
