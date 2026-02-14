@@ -161,10 +161,6 @@ function LoginPage({
 								<Button className="w-full" onClick={onSignIn}>
 									Sign in
 								</Button>
-								<p className="text-center text-xs text-muted-foreground">
-									Tip: once inside, press <kbd className="dash-key">/</kbd> to
-									search files.
-								</p>
 							</CardFooter>
 						</Card>
 					</div>
@@ -224,7 +220,6 @@ function App() {
 	} | null>(null);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
-	const searchRef = useRef<HTMLInputElement>(null);
 	const terminalRef = useRef<HTMLDivElement>(null);
 	const terminalInstanceRef = useRef<Terminal | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
@@ -350,30 +345,6 @@ function App() {
 		if (!isAuthenticated) return;
 		void fetchEntries("/");
 	}, [isAuthenticated]);
-
-	useEffect(() => {
-		const handler = (event: KeyboardEvent) => {
-			if (activeTab !== "files") return;
-			if (!searchRef.current) return;
-			const isTypingTarget =
-				event.target instanceof HTMLElement &&
-				(event.target.tagName === "INPUT" ||
-					event.target.tagName === "TEXTAREA" ||
-					event.target.isContentEditable);
-			if (isTypingTarget) return;
-			if (event.key === "/") {
-				event.preventDefault();
-				searchRef.current.focus();
-			}
-			if (event.key === "Escape") {
-				if (document.activeElement === searchRef.current) {
-					searchRef.current.blur();
-				}
-			}
-		};
-		window.addEventListener("keydown", handler);
-		return () => window.removeEventListener("keydown", handler);
-	}, [activeTab]);
 
 	useEffect(() => {
 		if (!isAuthenticated) return;
@@ -840,7 +811,7 @@ function App() {
 						<p className="dash-sub">
 							Manage files under{" "}
 							<span className="text-foreground/90">/data</span> and send console
-							commands. Press <kbd className="dash-key">/</kbd> to search files.
+							commands.
 						</p>
 					</div>
 					<div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/35 px-3 py-2">
@@ -894,8 +865,11 @@ function App() {
 					</button>
 				</nav>
 
-				{activeTab === "console" ? (
-					<section className="mt-6 grid gap-4" aria-label="Console">
+				<section
+					className="mt-6 grid gap-4"
+					aria-label="Console"
+					hidden={activeTab !== "console"}
+				>
 						<div className="dash-surface">
 							<div className="dash-panelhead">
 								<div>
@@ -1072,8 +1046,11 @@ function App() {
 							</section>
 						</div>
 					</section>
-				) : (
-					<section className="dash-split" aria-label="Files">
+					<section
+						className="dash-split"
+						aria-label="Files"
+						hidden={activeTab !== "files"}
+					>
 						<div className="dash-surface">
 							<div className="dash-panelhead">
 								<div>
@@ -1142,10 +1119,9 @@ function App() {
 								</div>
 
 								<input
-									ref={searchRef}
 									value={query}
 									onChange={(e) => setQuery(e.target.value)}
-									placeholder="Search files (press /)…"
+									placeholder="Search files…"
 									className="h-11 w-full rounded-2xl border border-border/70 bg-background/35 px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring"
 								/>
 
@@ -1293,7 +1269,6 @@ function App() {
 							</div>
 						</aside>
 					</section>
-				)}
 
 				<AlertDialog
 					open={Boolean(deleteTarget)}
