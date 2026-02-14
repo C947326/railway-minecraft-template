@@ -79,7 +79,7 @@ function LoginPage({
 	onSignIn: () => void;
 }) {
 	return (
-		<div className="min-h-screen dash-bg text-foreground">
+		<div className="flex min-h-screen flex-col dash-bg text-foreground">
 			<div className="mx-auto flex min-h-screen w-full max-w-lg items-center px-6 py-12">
 				<div className="w-full space-y-5 dash-appear">
 					<div className="space-y-3 text-center">
@@ -166,6 +166,17 @@ function LoginPage({
 					</div>
 				</div>
 			</div>
+			<footer className="pb-5 text-center text-xs text-muted-foreground">
+				made with ❤️ by{" "}
+				<a
+					href="https://github.com/ThallesP"
+					target="_blank"
+					rel="noreferrer"
+					className="underline-offset-4 hover:underline"
+				>
+					thallesp
+				</a>
+			</footer>
 		</div>
 	);
 }
@@ -802,7 +813,7 @@ function App() {
 	}
 
 	return (
-		<div className="min-h-screen dash-bg text-foreground">
+		<div className="flex min-h-screen flex-col dash-bg text-foreground">
 			<div className="dash-shell dash-appear">
 				<header className="dash-topbar">
 					<div>
@@ -1290,6 +1301,17 @@ function App() {
 					</AlertDialogContent>
 				</AlertDialog>
 			</div>
+			<footer className="pb-5 text-center text-xs text-muted-foreground">
+				made with ❤️ by{" "}
+				<a
+					href="https://github.com/ThallesP"
+					target="_blank"
+					rel="noreferrer"
+					className="underline-offset-4 hover:underline"
+				>
+					thallesp
+				</a>
+			</footer>
 		</div>
 	);
 }
