@@ -232,7 +232,6 @@ function App() {
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const folderInputRef = useRef<HTMLInputElement>(null);
-	const archiveInputRef = useRef<HTMLInputElement>(null);
 	const terminalRef = useRef<HTMLDivElement>(null);
 	const terminalInstanceRef = useRef<Terminal | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
@@ -618,16 +617,11 @@ function App() {
 		file: File,
 		options: {
 			relativePath?: string;
-			extractArchive?: boolean;
 			onProgress?: (uploadedBytes: number, totalBytes: number) => void;
 		} = {},
 	) => {
 		const uploadName = file.name || "upload.bin";
-		const params = new URLSearchParams({ path: currentPath });
-		if (options.extractArchive) {
-			params.set("extract", "1");
-		}
-		const uploadPath = `/api/files/upload?${params.toString()}`;
+		const uploadPath = `/api/files/upload?path=${encodeURIComponent(currentPath)}`;
 		const totalBytes = Math.max(file.size, 1);
 		let uploadedBytes = 0;
 		const reader = file.stream().getReader();
@@ -744,36 +738,6 @@ function App() {
 			setUploadProgress(0);
 			if (folderInputRef.current) {
 				folderInputRef.current.value = "";
-			}
-		}
-	};
-
-	const handleUploadArchive = async (file: File | null) => {
-		if (!file) return;
-		setUploading(true);
-		setUploadProgress(0);
-		setUploadName(file.name || "archive");
-		setError(null);
-		try {
-			await uploadFile(file, {
-				extractArchive: true,
-				onProgress: (uploadedBytes, totalBytes) => {
-					const percent = Math.min(
-						100,
-						Math.round((uploadedBytes / totalBytes) * 100),
-					);
-					setUploadProgress(percent);
-				},
-			});
-			await fetchEntries(currentPath);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Archive upload failed.");
-		} finally {
-			setUploading(false);
-			setUploadName(null);
-			setUploadProgress(0);
-			if (archiveInputRef.current) {
-				archiveInputRef.current.value = "";
 			}
 		}
 	};
@@ -1201,15 +1165,6 @@ function App() {
 											handleUploadFolder(event.target.files)
 										}
 									/>
-									<input
-										ref={archiveInputRef}
-										type="file"
-										accept=".zip,.tar,.tgz,.tar.gz,application/zip,application/x-tar,application/gzip,application/x-gzip"
-										className="hidden"
-										onChange={(event) =>
-											handleUploadArchive(event.target.files?.[0] ?? null)
-										}
-									/>
 
 									<Button
 										variant="outline"
@@ -1231,17 +1186,6 @@ function App() {
 									>
 										<Folder className="h-4 w-4 opacity-80" />
 										Upload folder
-									</Button>
-
-									<Button
-										variant="outline"
-										size="sm"
-										className="h-9 rounded-full bg-background/40 px-4"
-										onClick={() => archiveInputRef.current?.click()}
-										disabled={uploading}
-									>
-										<Upload className="h-4 w-4 opacity-80" />
-										Extract archive
 									</Button>
 
 									<Button
