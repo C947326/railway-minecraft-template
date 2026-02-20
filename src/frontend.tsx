@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
 	StrictMode,
+	type DragEvent as ReactDragEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -49,6 +50,39 @@ type FileEntry = {
 	type: "file" | "dir";
 	size: number;
 	mtime: string;
+};
+
+type UploadItem = {
+	file: File;
+	relativePath: string;
+};
+
+type RequestInitWithDuplex = RequestInit & {
+	duplex?: "half";
+};
+
+type WebkitFileSystemEntry = {
+	isFile: boolean;
+	isDirectory: boolean;
+	name: string;
+};
+
+type WebkitFileSystemFileEntry = WebkitFileSystemEntry & {
+	file: (
+		successCallback: (file: File) => void,
+		errorCallback?: (error: DOMException) => void,
+	) => void;
+};
+
+type WebkitFileSystemDirectoryReader = {
+	readEntries: (
+		successCallback: (entries: WebkitFileSystemEntry[]) => void,
+		errorCallback?: (error: DOMException) => void,
+	) => void;
+};
+
+type WebkitFileSystemDirectoryEntry = WebkitFileSystemEntry & {
+	createReader: () => WebkitFileSystemDirectoryReader;
 };
 
 const formatSize = (bytes: number) => {
@@ -199,6 +233,7 @@ function App() {
 	const [uploading, setUploading] = useState(false);
 	const [uploadProgress, setUploadProgress] = useState(0);
 	const [uploadName, setUploadName] = useState<string | null>(null);
+	const [isDropTargetActive, setIsDropTargetActive] = useState(false);
 	const [activeTab, setActiveTab] = useState<"console" | "files">("console");
 
 	const [query, setQuery] = useState("");
@@ -247,7 +282,11 @@ function App() {
 
 	const apiFetch = useCallback(
 		async (input: RequestInfo | URL, init?: RequestInit) => {
-			const res = await fetch(input, init);
+			const nextInit =
+				init && init.body instanceof ReadableStream
+					? ({ ...init, duplex: "half" } as RequestInitWithDuplex)
+					: init;
+			const res = await fetch(input, nextInit);
 			if (res.status === 401) {
 				markUnauthenticated("Session expired. Please sign in again.");
 				throw new Error("Unauthorized.");
@@ -658,6 +697,19 @@ function App() {
 		}
 	};
 
+	const normalizeUploadRelativePath = (
+		value: string | null | undefined,
+		fallbackName: string,
+	) => {
+		const normalized = (value ?? "")
+			.replaceAll("\\", "/")
+			.replace(/^\/+/, "")
+			.split("/")
+			.filter((segment) => segment.length > 0 && segment !== ".")
+			.join("/");
+		return normalized || fallbackName || "upload.bin";
+	};
+
 	const handleUploadSingleFile = async (file: File | null) => {
 		if (!file) return;
 		setUploading(true);
@@ -687,27 +739,29 @@ function App() {
 		}
 	};
 
-	const handleUploadFolder = async (fileList: FileList | null) => {
-		const files = Array.from(fileList ?? []);
-		if (!files.length) return;
+	const uploadFolderItems = async (
+		items: UploadItem[],
+		options?: { onFinish?: () => void },
+	) => {
+		if (!items.length) return;
 		setUploading(true);
 		setUploadProgress(0);
-		setUploadName(`folder (${files.length} files)`);
+		setUploadName(`folder (${items.length} files)`);
 		setError(null);
 		try {
 			const totalBytes = Math.max(
-				files.reduce((sum, file) => sum + Math.max(file.size, 1), 0),
+				items.reduce((sum, item) => sum + Math.max(item.file.size, 1), 0),
 				1,
 			);
 			let completedBytes = 0;
 
-			for (const file of files) {
-				const relativePath =
-					file.webkitRelativePath && file.webkitRelativePath.trim().length > 0
-						? file.webkitRelativePath
-						: file.name;
+			for (const item of items) {
+				const relativePath = normalizeUploadRelativePath(
+					item.relativePath,
+					item.file.name,
+				);
 				setUploadName(relativePath);
-				await uploadFile(file, {
+				await uploadFile(item.file, {
 					relativePath,
 					onProgress: (uploadedBytes, currentFileTotal) => {
 						const percent = Math.min(
@@ -721,7 +775,7 @@ function App() {
 						setUploadProgress(percent);
 					},
 				});
-				completedBytes += Math.max(file.size, 1);
+				completedBytes += Math.max(item.file.size, 1);
 				const percent = Math.min(
 					100,
 					Math.round((completedBytes / totalBytes) * 100),
@@ -736,10 +790,121 @@ function App() {
 			setUploading(false);
 			setUploadName(null);
 			setUploadProgress(0);
-			if (folderInputRef.current) {
-				folderInputRef.current.value = "";
-			}
+			options?.onFinish?.();
 		}
+	};
+
+	const handleUploadFolder = async (fileList: FileList | null) => {
+		const items = Array.from(fileList ?? []).map((file) => ({
+			file,
+			relativePath: normalizeUploadRelativePath(file.webkitRelativePath, file.name),
+		}));
+		await uploadFolderItems(items, {
+			onFinish: () => {
+				if (folderInputRef.current) {
+					folderInputRef.current.value = "";
+				}
+			},
+		});
+	};
+
+	const readDroppedDirectoryEntries = async (
+		entry: WebkitFileSystemDirectoryEntry,
+	): Promise<WebkitFileSystemEntry[]> => {
+		const reader = entry.createReader();
+		const entries: WebkitFileSystemEntry[] = [];
+		for (;;) {
+			const chunk = await new Promise<WebkitFileSystemEntry[]>(
+				(resolve, reject) => {
+					reader.readEntries(resolve, reject);
+				},
+			);
+			if (!chunk.length) break;
+			entries.push(...chunk);
+		}
+		return entries;
+	};
+
+	const readDroppedFileEntry = (entry: WebkitFileSystemFileEntry) =>
+		new Promise<File>((resolve, reject) => {
+			entry.file(resolve, reject);
+		});
+
+	const flattenDroppedEntry = async (
+		entry: WebkitFileSystemEntry,
+		parentPath = "",
+	): Promise<UploadItem[]> => {
+		const currentPath = normalizeUploadRelativePath(
+			`${parentPath}/${entry.name}`,
+			entry.name,
+		);
+		if (entry.isFile) {
+			const file = await readDroppedFileEntry(entry as WebkitFileSystemFileEntry);
+			return [{ file, relativePath: currentPath }];
+		}
+		if (!entry.isDirectory) return [];
+		const children = await readDroppedDirectoryEntries(
+			entry as WebkitFileSystemDirectoryEntry,
+		);
+		const nested = await Promise.all(
+			children.map((child) => flattenDroppedEntry(child, currentPath)),
+		);
+		return nested.flat();
+	};
+
+	const readDroppedItems = async (dataTransfer: DataTransfer) => {
+		const droppedEntries = Array.from(dataTransfer.items ?? [])
+			.map((item) => {
+				const entryGetter = (
+					item as DataTransferItem & {
+						webkitGetAsEntry?: () => WebkitFileSystemEntry | null;
+					}
+				).webkitGetAsEntry;
+				return entryGetter ? entryGetter.call(item) : null;
+			})
+			.filter((entry): entry is WebkitFileSystemEntry => Boolean(entry));
+
+		if (droppedEntries.length) {
+			const nested = await Promise.all(
+				droppedEntries.map((entry) => flattenDroppedEntry(entry)),
+			);
+			return nested.flat();
+		}
+
+		return Array.from(dataTransfer.files ?? []).map((file) => ({
+			file,
+			relativePath: normalizeUploadRelativePath(file.webkitRelativePath, file.name),
+		}));
+	};
+
+	const handleFileBrowserDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		if (uploading) return;
+		event.dataTransfer.dropEffect = "copy";
+		setIsDropTargetActive(true);
+	};
+
+	const handleFileBrowserDragLeave = (
+		event: ReactDragEvent<HTMLDivElement>,
+	) => {
+		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+		setIsDropTargetActive(false);
+	};
+
+	const handleFileBrowserDrop = async (event: ReactDragEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		setIsDropTargetActive(false);
+		if (uploading) return;
+		const items = await readDroppedItems(event.dataTransfer);
+		if (!items.length) {
+			setError("No files found in dropped selection.");
+			return;
+		}
+		await uploadFolderItems(items);
+	};
+
+	const clearDropTarget = () => {
+		setIsDropTargetActive(false);
 	};
 
 	const openFolderPicker = () => {
@@ -1206,7 +1371,21 @@ function App() {
 								</div>
 							</div>
 
-							<div className="dash-bodypad space-y-4">
+							{/* biome-ignore lint/a11y/noStaticElementInteractions: This panel intentionally handles drag-and-drop file uploads. */}
+							<div
+								className={cn(
+									"dash-bodypad space-y-4",
+									isDropTargetActive &&
+										"rounded-2xl border border-dashed border-primary/50 bg-primary/5",
+								)}
+								onDragOver={handleFileBrowserDragOver}
+								onDragLeave={handleFileBrowserDragLeave}
+								onDrop={(event) => {
+									void handleFileBrowserDrop(event);
+								}}
+								onDragEnd={clearDropTarget}
+								onDragExit={clearDropTarget}
+							>
 								<div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 									{breadcrumbs.map((crumb, index) => (
 										<span key={crumb.path} className="flex items-center gap-2">
@@ -1228,6 +1407,9 @@ function App() {
 									placeholder="Search files…"
 									className="h-11 w-full rounded-2xl border border-border/70 bg-background/35 px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring"
 								/>
+								<div className="text-[11px] text-muted-foreground">
+									Tip: drag and drop files or folders here to upload.
+								</div>
 
 								{error ? (
 									<div className="dash-mutedbox text-destructive">{error}</div>
