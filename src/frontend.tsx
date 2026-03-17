@@ -6,6 +6,7 @@ import {
 	FileText,
 	Folder,
 	LogOut,
+	Play,
 	Power,
 	RefreshCw,
 	Terminal as TerminalIcon,
@@ -56,6 +57,18 @@ type FileEntry = {
 type UploadItem = {
 	file: File;
 	relativePath: string;
+};
+
+type PowerStateStatus = "starting" | "running" | "stopping" | "stopped" | "error";
+
+type PowerState = {
+	status: PowerStateStatus;
+	pid: number | null;
+	error: string | null;
+	lastStartRequestedAt: string | null;
+	lastStartedAt: string | null;
+	lastStopRequestedAt: string | null;
+	lastStoppedAt: string | null;
 };
 
 type RequestInitWithDuplex = RequestInit & {
@@ -265,9 +278,18 @@ function App() {
 		error?: string;
 		fetchedAt?: number;
 	} | null>(null);
-	const [poweroffPending, setPoweroffPending] = useState(false);
-	const [poweroffDialogOpen, setPoweroffDialogOpen] = useState(false);
-	const [poweroffError, setPoweroffError] = useState<string | null>(null);
+	const [powerState, setPowerState] = useState<PowerState>({
+		status: "stopped",
+		pid: null,
+		error: null,
+		lastStartRequestedAt: null,
+		lastStartedAt: null,
+		lastStopRequestedAt: null,
+		lastStoppedAt: null,
+	});
+	const [powerDialogOpen, setPowerDialogOpen] = useState(false);
+	const [powerAction, setPowerAction] = useState<"start" | "stop">("stop");
+	const [powerActionError, setPowerActionError] = useState<string | null>(null);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const folderInputRef = useRef<HTMLInputElement>(null);
@@ -276,7 +298,23 @@ function App() {
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const inputBufferRef = useRef("");
 	const logStreamRef = useRef<WebSocket | null>(null);
+	const powerStateRef = useRef<PowerState>({
+		status: "stopped",
+		pid: null,
+		error: null,
+		lastStartRequestedAt: null,
+		lastStartedAt: null,
+		lastStopRequestedAt: null,
+		lastStoppedAt: null,
+	});
 	const prompt = "server> ";
+	const isServerRunning = powerState.status === "running";
+	const isServerStarting = powerState.status === "starting";
+	const isServerStopping = powerState.status === "stopping";
+	const canStartServer =
+		powerState.pid === null &&
+		(powerState.status === "stopped" || powerState.status === "error");
+	const canStopServer = powerState.pid !== null && powerState.status !== "stopped";
 
 	const markUnauthenticated = useCallback((message?: string) => {
 		setIsAuthenticated(false);
@@ -328,6 +366,10 @@ function App() {
 		if (!q) return entries;
 		return entries.filter((entry) => entry.name.toLowerCase().includes(q));
 	}, [entries, query]);
+
+	useEffect(() => {
+		powerStateRef.current = powerState;
+	}, [powerState]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -585,12 +627,13 @@ function App() {
 	useEffect(() => {
 		if (!isAuthenticated) return;
 		let cancelled = false;
+		let timer: number | null = null;
 
-		const fetchPoweroffState = async () => {
+		const fetchPowerState = async () => {
 			try {
-				const res = await apiFetch("/api/server/poweroff");
+				const res = await apiFetch("/api/server/power-state");
 				const payload = (await res.json()) as
-					| { ok: true; pending: boolean }
+					| { ok: true; data: PowerState }
 					| { ok?: false; error?: string };
 
 				if (!res.ok || !payload.ok) {
@@ -602,10 +645,16 @@ function App() {
 				}
 
 				if (cancelled) return;
-				setPoweroffPending(Boolean(payload.pending));
+				setPowerState(payload.data);
+				if (
+					payload.data.status === "running" ||
+					payload.data.status === "stopped"
+				) {
+					setPowerActionError(null);
+				}
 			} catch (error) {
 				if (cancelled) return;
-				setPoweroffError(
+				setPowerActionError(
 					error instanceof Error
 						? error.message
 						: "Failed to read server power state.",
@@ -613,9 +662,11 @@ function App() {
 			}
 		};
 
-		void fetchPoweroffState();
+		void fetchPowerState();
+		timer = window.setInterval(fetchPowerState, 3000);
 		return () => {
 			cancelled = true;
+			if (timer) window.clearInterval(timer);
 		};
 	}, [apiFetch, isAuthenticated]);
 
@@ -972,6 +1023,22 @@ function App() {
 		const commandText = rawCommand.trim();
 		if (!term) return;
 		const shouldPrompt = options.rePrompt ?? true;
+		const currentPowerState = powerStateRef.current;
+		if (currentPowerState.status !== "running") {
+			const message =
+				currentPowerState.status === "starting"
+					? "Minecraft is still starting."
+					: currentPowerState.status === "stopping"
+						? "Minecraft is stopping."
+						: "Minecraft is offline. Start the server first.";
+			if (shouldPrompt) {
+				term.write(`${message}\r\n`);
+				writePrompt(term);
+			} else {
+				writeLogLine(message);
+			}
+			return;
+		}
 		if (!commandText) {
 			if (shouldPrompt) writePrompt(term);
 			return;
@@ -1041,11 +1108,26 @@ function App() {
 	}, [playerList, playerQuery]);
 
 	const playerCountLabel = useMemo(() => {
-		if (serverStatus) {
+		if (isServerRunning && serverStatus) {
 			return `${serverStatus.players.online}/${serverStatus.players.max}`;
 		}
 		return "—";
-	}, [serverStatus]);
+	}, [isServerRunning, serverStatus]);
+
+	const powerStateLabel = useMemo(() => {
+		switch (powerState.status) {
+			case "starting":
+				return "starting";
+			case "running":
+				return "running";
+			case "stopping":
+				return "stopping";
+			case "error":
+				return "error";
+			default:
+				return "stopped";
+		}
+	}, [powerState.status]);
 
 	const handleSignIn = () => {
 		window.location.href = "/api/auth/redirect";
@@ -1063,29 +1145,58 @@ function App() {
 		setAuthError(null);
 	};
 
-	const handlePoweroff = async () => {
-		setPoweroffError(null);
+	const performPowerAction = async (action: "start" | "stop") => {
+		setPowerActionError(null);
 		try {
-			const res = await apiFetch("/api/server/poweroff", {
+			const res = await apiFetch(`/api/server/${action}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({}),
 			});
 			const payload = (await res.json().catch(() => ({}))) as {
 				ok?: boolean;
-				pending?: boolean;
+				data?: PowerState;
 				error?: string;
 			};
-			if (!res.ok || !payload.ok) {
-				throw new Error(payload.error ?? "Power-off request failed.");
+			if (!res.ok || !payload.ok || !payload.data) {
+				throw new Error(
+					payload.error ??
+						(action === "start"
+							? "Power-on request failed."
+							: "Power-off request failed."),
+				);
 			}
-			setPoweroffPending(Boolean(payload.pending));
-			setPoweroffDialogOpen(false);
+			setPowerState(payload.data);
+			setPowerDialogOpen(false);
 		} catch (error) {
-			setPoweroffError(
-				error instanceof Error ? error.message : "Power-off request failed.",
+			setPowerActionError(
+				error instanceof Error
+					? error.message
+					: action === "start"
+						? "Power-on request failed."
+						: "Power-off request failed.",
 			);
 		}
+	};
+
+	const handlePowerOn = async () => {
+		setPowerState((current) => ({
+			...current,
+			status: "starting",
+			error: null,
+			lastStartRequestedAt: new Date().toISOString(),
+		}));
+		await performPowerAction("start");
+	};
+
+	const handlePowerOff = async () => {
+		setPowerState((current) => ({
+			...current,
+			status: "stopping",
+			error: null,
+			lastStopRequestedAt: new Date().toISOString(),
+		}));
+		await performPowerAction("stop");
 	};
 
 	const userInitial = useMemo(
@@ -1181,15 +1292,15 @@ function App() {
 								<div>
 									<div className="dash-paneltitle">Console</div>
 									<div className="text-xs text-muted-foreground">
-										Logs stream into the terminal. Type a command and press
-										Enter.
+										Logs stream into the terminal. Console input is enabled only
+										while Minecraft is running.
 									</div>
 								</div>
 
 								<div className="flex flex-wrap items-center justify-end gap-2">
 									<span className="dash-chip">
 										<span className={dotClass} />
-										{serverStatus ? "online" : "unknown"}
+										{powerStateLabel}
 									</span>
 								</div>
 							</div>
@@ -1225,7 +1336,7 @@ function App() {
 											size="sm"
 											className="h-9 rounded-full bg-background/40 px-4"
 											onClick={runPlayers}
-											disabled={!terminalReady}
+											disabled={!terminalReady || !isServerRunning}
 										>
 											<RefreshCw className="h-4 w-4 opacity-80" />
 											Refresh
@@ -1233,12 +1344,28 @@ function App() {
 										<Button
 											variant="outline"
 											size="sm"
-											className="h-9 rounded-full border-destructive/35 bg-destructive/10 px-4 text-destructive hover:bg-destructive/15"
-											onClick={() => setPoweroffDialogOpen(true)}
-											disabled={poweroffPending}
+											className="h-9 rounded-full bg-emerald-500/10 px-4 text-emerald-200 hover:bg-emerald-500/15 disabled:opacity-60"
+											onClick={() => {
+												setPowerAction("start");
+												setPowerDialogOpen(true);
+											}}
+											disabled={!canStartServer}
+										>
+											<Play className="h-4 w-4 opacity-80" />
+											Power on
+										</Button>
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-9 rounded-full border-destructive/35 bg-destructive/10 px-4 text-destructive hover:bg-destructive/15 disabled:opacity-60"
+											onClick={() => {
+												setPowerAction("stop");
+												setPowerDialogOpen(true);
+											}}
+											disabled={!canStopServer}
 										>
 											<Power className="h-4 w-4 opacity-80" />
-											{poweroffPending ? "Powering off" : "Power off"}
+											Power off
 										</Button>
 									</div>
 								</div>
@@ -1252,7 +1379,7 @@ function App() {
 													Status
 												</div>
 												<div className="mt-1 text-sm text-foreground/95">
-													{serverStatus ? "online" : "unknown"}
+													{powerStateLabel}
 												</div>
 											</div>
 
@@ -1270,7 +1397,7 @@ function App() {
 													Version
 												</div>
 												<div className="mt-1 text-sm text-foreground/95">
-													{serverStatus?.version ?? "—"}
+													{isServerRunning ? (serverStatus?.version ?? "—") : "—"}
 												</div>
 											</div>
 
@@ -1291,20 +1418,25 @@ function App() {
 										</div>
 									) : null}
 
-									{poweroffPending ? (
-										<div className="dash-mutedbox border-destructive/40 text-destructive">
-											Shutdown requested. Minecraft will stop cleanly, then this
-											Railway service will exit.
+									{powerState.status === "stopped" ? (
+										<div className="dash-mutedbox">
+											Minecraft is fully powered off. Use <span className="text-foreground">Power on</span> when your meetup is ready to begin.
 										</div>
 									) : null}
 
-									{poweroffError ? (
+									{powerActionError ? (
 										<div className="dash-mutedbox text-destructive">
-											{poweroffError}
+											{powerActionError}
 										</div>
 									) : null}
 
-									{serverStatus?.motd ? (
+									{powerState.error ? (
+										<div className="dash-mutedbox text-destructive">
+											{powerState.error}
+										</div>
+									) : null}
+
+									{isServerRunning && serverStatus?.motd ? (
 										<div className="dash-mutedbox">{serverStatus.motd}</div>
 									) : null}
 								</div>
@@ -1327,7 +1459,7 @@ function App() {
 										className="h-10 w-full rounded-2xl border border-border/70 bg-background/35 px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring"
 									/>
 
-									{playerList.length ? (
+									{isServerRunning && playerList.length ? (
 										filteredPlayers.length ? (
 											<div className="max-h-72 space-y-2 overflow-y-auto pr-1">
 												{filteredPlayers.map((name) => (
@@ -1343,7 +1475,7 @@ function App() {
 															size="sm"
 															className="h-9 shrink-0 rounded-full bg-background px-4"
 															onClick={() => runMacro(`op ${name}`)}
-															disabled={!terminalReady}
+															disabled={!terminalReady || !isServerRunning}
 														>
 															OP
 														</Button>
@@ -1355,11 +1487,15 @@ function App() {
 												No matching players.
 											</div>
 										)
-									) : (
+									) : isServerRunning ? (
 										<div className="dash-mutedbox">No players detected.</div>
+									) : (
+										<div className="dash-mutedbox">
+											Player list will appear after the server is powered on.
+										</div>
 									)}
 
-									{playerList.length ? (
+									{isServerRunning && playerList.length ? (
 										<div className="text-[11px] text-muted-foreground">
 											Tip: OP runs via the console pipe (shows in the
 											terminal output).
@@ -1630,30 +1766,44 @@ function App() {
 					</section>
 
 				<AlertDialog
-					open={poweroffDialogOpen}
-					onOpenChange={setPoweroffDialogOpen}
+					open={powerDialogOpen}
+					onOpenChange={setPowerDialogOpen}
 				>
 					<AlertDialogContent>
 						<AlertDialogHeader>
-							<AlertDialogTitle>Power off server?</AlertDialogTitle>
+							<AlertDialogTitle>
+								{powerAction === "start" ? "Power on server?" : "Power off server?"}
+							</AlertDialogTitle>
 							<AlertDialogDescription>
-								This sends Minecraft a clean stop command, then exits the Railway
-								service to cut idle usage. You will need to start the service
-								again from Railway before the dashboard returns.
+								{powerAction === "start"
+									? "This starts Minecraft inside the current Railway service and keeps the Bun dashboard available while the server boots."
+									: "This cleanly stops Minecraft, saves the world, and leaves only the Bun dashboard online so idle Java memory drops away."}
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
-							<AlertDialogCancel disabled={poweroffPending}>
+							<AlertDialogCancel
+								disabled={isServerStarting || isServerStopping}
+							>
 								Cancel
 							</AlertDialogCancel>
 							<AlertDialogAction
 								onClick={(event) => {
 									event.preventDefault();
-									void handlePoweroff();
+									void (powerAction === "start"
+										? handlePowerOn()
+										: handlePowerOff());
 								}}
-								disabled={poweroffPending}
+								disabled={
+									powerAction === "start" ? !canStartServer : !canStopServer
+								}
 							>
-								{poweroffPending ? "Powering off..." : "Power off"}
+								{powerAction === "start"
+									? isServerStarting
+										? "Powering on..."
+										: "Power on"
+									: isServerStopping
+										? "Powering off..."
+										: "Power off"}
 							</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>

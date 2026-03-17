@@ -21,6 +21,7 @@ COPY docker/start.sh /app/docker/start.sh
 RUN chmod +x /app/docker/start.sh
 
 ENV CREATE_CONSOLE_IN_PIPE=true
+ENV MC_AUTO_START=false
 
 EXPOSE 3000
 

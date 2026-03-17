@@ -17,12 +17,13 @@ const LOG_TAIL_BYTES = 20_000;
 const LOG_POLL_MS = 1000;
 const WS_AUTH_REVALIDATE_MS = 30_000;
 const MC_STATUS_CACHE_MS = 8000;
-const SHUTDOWN_REQUEST_PATH = path.resolve(
-	env.MC_SHUTDOWN_REQUEST_PATH ?? "/tmp/minecraft-poweroff-request.json",
-);
 const SHUTDOWN_NOTICE =
 	env.MC_SHUTDOWN_NOTICE ??
 	"Server powering off from the control dashboard. Rejoin after it is started again.";
+const STARTUP_PROBE_TIMEOUT_MS = 120_000;
+const STARTUP_PROBE_INTERVAL_MS = 1_000;
+const STOP_WAIT_TIMEOUT_MS = 60_000;
+const STOP_WAIT_POLL_MS = 500;
 const RAILWAY_GRAPHQL_ENDPOINT = "https://backboard.railway.com/graphql/v2";
 const RAILWAY_OAUTH_ME_ENDPOINT = "https://backboard.railway.com/oauth/me";
 const RAILWAY_OAUTH_SCOPE = "openid profile email project:viewer";
@@ -358,6 +359,8 @@ const getControlPort = () => {
 const getStatusCacheMs = () =>
 	getPositiveInt(env.MC_STATUS_CACHE_MS, MC_STATUS_CACHE_MS, 250);
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 type ConsoleLogSocketData = {
 	tailBytes: number;
 	position: number;
@@ -383,6 +386,18 @@ type StatusSnapshot = {
 	};
 };
 
+type PowerStateStatus = "starting" | "running" | "stopping" | "stopped" | "error";
+
+type PowerStateSnapshot = {
+	status: PowerStateStatus;
+	pid: number | null;
+	error: string | null;
+	lastStartRequestedAt: string | null;
+	lastStartedAt: string | null;
+	lastStopRequestedAt: string | null;
+	lastStoppedAt: string | null;
+};
+
 const createBaseStatusSnapshot = (): StatusSnapshot => ({
 	host: env.MC_SERVER_HOST,
 	port: getMCServerPort(),
@@ -401,6 +416,20 @@ let statusCache: {
 	fetchedAt: number;
 } | null = null;
 let statusInFlight: Promise<StatusSnapshot> | null = null;
+let minecraftProcess: ReturnType<typeof Bun.spawn> | null = null;
+let minecraftProcessGeneration = 0;
+let activeTransition: Promise<void> | null = null;
+let powerState: PowerStateSnapshot = {
+	status: isTruthy(env.MC_AUTO_START) ? "starting" : "stopped",
+	pid: null,
+	error: null,
+	lastStartRequestedAt: isTruthy(env.MC_AUTO_START)
+		? new Date().toISOString()
+		: null,
+	lastStartedAt: null,
+	lastStopRequestedAt: null,
+	lastStoppedAt: isTruthy(env.MC_AUTO_START) ? null : new Date().toISOString(),
+};
 
 const normalizeMotd = (motd: unknown) => {
 	if (!motd) return null;
@@ -455,7 +484,254 @@ const readLogTail = async (bytes = 25_000) => {
 	}
 };
 
+const invalidateStatusCache = () => {
+	statusCache = null;
+	statusInFlight = null;
+};
+
+const setPowerState = (
+	patch: Partial<PowerStateSnapshot> & Pick<PowerStateSnapshot, "status">,
+) => {
+	powerState = {
+		...powerState,
+		...patch,
+	};
+	if (patch.status === "stopped" || patch.status === "error") {
+		invalidateStatusCache();
+	}
+};
+
+const getPowerStateSnapshot = (): PowerStateSnapshot => ({
+	...powerState,
+});
+
+const hasActiveMinecraftProcess = () =>
+	Boolean(minecraftProcess && powerState.pid);
+
+const probeServerOnline = async () => {
+	try {
+		await mc.lookup({
+			host: env.MC_SERVER_HOST,
+			port: getMCServerPort(),
+			timeout: 1500,
+			ping: false,
+			SRVLookup: true,
+			JSONParse: false,
+			throwOnParseError: false,
+		});
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+const executeLocalCommand = async (cmd: string[]) => {
+	const proc = Bun.spawn(cmd, {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [exitCode, stdout, stderr] = await Promise.all([
+		proc.exited,
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	return {
+		exitCode,
+		stdout: stdout.trim(),
+		stderr: stderr.trim(),
+	};
+};
+
+const waitForMinecraftExit = async (
+	generation: number,
+	timeoutMs = STOP_WAIT_TIMEOUT_MS,
+) => {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (
+			!minecraftProcess ||
+			minecraftProcessGeneration !== generation ||
+			!powerState.pid
+		) {
+			return true;
+		}
+		await sleep(STOP_WAIT_POLL_MS);
+	}
+	return !minecraftProcess || minecraftProcessGeneration !== generation;
+};
+
+const launchMinecraftProcess = () => {
+	const proc = Bun.spawn(["/start"], {
+		stdout: "inherit",
+		stderr: "inherit",
+		stdin: "ignore",
+	});
+	minecraftProcessGeneration += 1;
+	const generation = minecraftProcessGeneration;
+	minecraftProcess = proc;
+	setPowerState({
+		status: "starting",
+		pid: proc.pid,
+		error: null,
+		lastStartRequestedAt: new Date().toISOString(),
+	});
+	invalidateStatusCache();
+
+	void proc.exited.then((exitCode) => {
+		if (minecraftProcessGeneration !== generation) return;
+		minecraftProcess = null;
+		const stoppedAt = new Date().toISOString();
+		if (powerState.status === "stopping") {
+			setPowerState({
+				status: "stopped",
+				pid: null,
+				error: null,
+				lastStoppedAt: stoppedAt,
+			});
+			return;
+		}
+		if (exitCode === 0) {
+			setPowerState({
+				status: "stopped",
+				pid: null,
+				error: null,
+				lastStoppedAt: stoppedAt,
+			});
+			return;
+		}
+		setPowerState({
+			status: "error",
+			pid: null,
+			error: `Minecraft exited unexpectedly with code ${exitCode}.`,
+			lastStoppedAt: stoppedAt,
+		});
+	});
+
+	void (async () => {
+		const deadline = Date.now() + STARTUP_PROBE_TIMEOUT_MS;
+		while (Date.now() < deadline) {
+			if (minecraftProcessGeneration !== generation) return;
+			if (!minecraftProcess) return;
+			if (await probeServerOnline()) {
+				setPowerState({
+					status: "running",
+					pid: proc.pid,
+					error: null,
+					lastStartedAt: new Date().toISOString(),
+				});
+				invalidateStatusCache();
+				return;
+			}
+			await sleep(STARTUP_PROBE_INTERVAL_MS);
+		}
+		if (
+			minecraftProcessGeneration === generation &&
+			minecraftProcess &&
+			powerState.status === "starting"
+		) {
+			setPowerState({
+				status: "error",
+				pid: proc.pid,
+				error: "Minecraft did not become ready before the startup timeout.",
+			});
+		}
+	})();
+};
+
+const startMinecraft = async () => {
+	if (
+		minecraftProcess ||
+		powerState.status === "running" ||
+		powerState.status === "starting"
+	) {
+		return getPowerStateSnapshot();
+	}
+	if (powerState.status === "stopping") {
+		throw new Error("Minecraft is stopping. Please wait.");
+	}
+	if (activeTransition) {
+		await activeTransition;
+		if (powerState.status === "running" || powerState.status === "starting") {
+			return getPowerStateSnapshot();
+		}
+	}
+	activeTransition = (async () => {
+		launchMinecraftProcess();
+	})().finally(() => {
+		activeTransition = null;
+	});
+	await activeTransition;
+	return getPowerStateSnapshot();
+};
+
+const stopMinecraft = async () => {
+	if (powerState.status === "stopped" || (powerState.status === "error" && !minecraftProcess)) {
+		return getPowerStateSnapshot();
+	}
+	if (!minecraftProcess) {
+		setPowerState({
+			status: "stopped",
+			pid: null,
+			error: null,
+			lastStoppedAt: new Date().toISOString(),
+		});
+		return getPowerStateSnapshot();
+	}
+	if (activeTransition) {
+		await activeTransition;
+		if (powerState.status === "stopped") {
+			return getPowerStateSnapshot();
+		}
+	}
+
+	const proc = minecraftProcess;
+	const generation = minecraftProcessGeneration;
+	setPowerState({
+		status: "stopping",
+		pid: proc.pid,
+		error: null,
+		lastStopRequestedAt: new Date().toISOString(),
+	});
+	invalidateStatusCache();
+
+	activeTransition = (async () => {
+		const stopResult = await executeLocalCommand(["rcon-cli", "stop"]);
+		if (stopResult.exitCode !== 0) {
+			if (isTruthy(env.CREATE_CONSOLE_IN_PIPE)) {
+				try {
+					await Bun.write(CONSOLE_PIPE, `say ${SHUTDOWN_NOTICE}\nstop\n`);
+				} catch {
+					// Let the graceful wait below handle the final failure case.
+				}
+			}
+		}
+
+		const exited = await waitForMinecraftExit(generation);
+		if (!exited && minecraftProcessGeneration === generation && minecraftProcess) {
+			minecraftProcess.kill();
+			await waitForMinecraftExit(generation, 5000);
+		}
+		if (minecraftProcessGeneration === generation) {
+			minecraftProcess = null;
+			setPowerState({
+				status: "stopped",
+				pid: null,
+				error: null,
+				lastStoppedAt: new Date().toISOString(),
+			});
+		}
+	}).finally(() => {
+		activeTransition = null;
+	});
+
+	await activeTransition;
+	return getPowerStateSnapshot();
+};
+
 const fetchServerStatus = async () => {
+	if (!hasActiveMinecraftProcess()) {
+		return createBaseStatusSnapshot();
+	}
 	const now = Date.now();
 	if (statusCache && now - statusCache.fetchedAt < getStatusCacheMs()) {
 		return statusCache.data;
@@ -544,36 +820,6 @@ const sendLogLine = (
 		ws.send(line);
 	} catch {
 		// ignore
-	}
-};
-
-const readShutdownState = async () => {
-	try {
-		const raw = await Bun.file(SHUTDOWN_REQUEST_PATH).text();
-		if (!raw.trim()) {
-			return {
-				pending: true,
-				requestedAt: null as string | null,
-				requestedBy: null as string | null,
-			};
-		}
-		const parsed = JSON.parse(raw) as {
-			requestedAt?: string;
-			requestedBy?: string | null;
-		};
-		return {
-			pending: true,
-			requestedAt:
-				typeof parsed.requestedAt === "string" ? parsed.requestedAt : null,
-			requestedBy:
-				typeof parsed.requestedBy === "string" ? parsed.requestedBy : null,
-		};
-	} catch {
-		return {
-			pending: false,
-			requestedAt: null as string | null,
-			requestedBy: null as string | null,
-		};
 	}
 };
 
@@ -1290,6 +1536,12 @@ const server = Bun.serve<ConsoleLogSocketData>({
 			POST: async (req: Request) => {
 				const authError = await ensureAuth(req);
 				if (authError) return authError;
+				if (powerState.status !== "running") {
+					return json(
+						{ error: "Minecraft is offline. Start the server first." },
+						{ status: 409 },
+					);
+				}
 
 				try {
 					const body = (await req.json()) as { command?: string };
@@ -1371,57 +1623,66 @@ const server = Bun.serve<ConsoleLogSocketData>({
 				}
 			},
 		},
-		"/api/server/poweroff": {
+		"/api/server/power-state": {
 			GET: async (req: Request) => {
 				const authError = await ensureAuth(req);
 				if (authError) return authError;
-				return json({ ok: true, ...(await readShutdownState()) });
+				const snapshot = getPowerStateSnapshot();
+				const online =
+					(snapshot.status === "starting" || snapshot.status === "running") &&
+					(await probeServerOnline());
+				return json({
+					ok: true,
+					data: {
+						...snapshot,
+						status:
+							snapshot.status === "starting" && online
+								? "running"
+								: snapshot.status,
+					},
+				});
 			},
+		},
+		"/api/server/start": {
 			POST: async (req: Request) => {
 				const authError = await ensureAuth(req);
 				if (authError) return authError;
 
 				try {
-					const existing = await readShutdownState();
-					if (existing.pending) {
-						return json({ ok: true, ...existing });
-					}
-
-					const accessToken = await getValidatedAccessToken(req);
-					let user: RailwayUserProfile | null = null;
-					if (accessToken) {
-						try {
-							user = await fetchRailwayUser(accessToken);
-						} catch {
-							user = null;
-						}
-					}
-					const requestedAt = new Date().toISOString();
-					await Bun.write(
-						SHUTDOWN_REQUEST_PATH,
-						JSON.stringify(
-							{
-								requestedAt,
-								requestedBy: user?.name ?? user?.email ?? null,
-								notice: SHUTDOWN_NOTICE,
-							},
-							null,
-							2,
-						),
-					);
+					const data = await startMinecraft();
 					return json({
 						ok: true,
-						pending: true,
-						requestedAt,
-						requestedBy: user?.name ?? user?.email ?? null,
+						data,
 					});
 				} catch (error) {
 					return json(
 						{
 							error:
-								error instanceof Error ? error.message : "Power-off request failed.",
+								error instanceof Error ? error.message : "Start request failed.",
 						},
-						{ status: 400 },
+						{ status: 409 },
+					);
+				}
+			},
+		},
+		"/api/server/stop": {
+			POST: async (req: Request) => {
+				const authError = await ensureAuth(req);
+				if (authError) return authError;
+
+				try {
+					const data = await stopMinecraft();
+					return json({
+						ok: true,
+						data,
+					});
+				} catch (error) {
+					return json(
+						{
+							error:
+								error instanceof Error ? error.message : "Stop request failed.",
+						},
+						{ status: 409 },
 					);
 				}
 			},
@@ -1611,5 +1872,15 @@ const server = Bun.serve<ConsoleLogSocketData>({
 		},
 	},
 });
+
+if (isTruthy(env.MC_AUTO_START)) {
+	void startMinecraft().catch((error) => {
+		setPowerState({
+			status: "error",
+			pid: null,
+			error: error instanceof Error ? error.message : "Automatic start failed.",
+		});
+	});
+}
 
 console.log(`🚀 Server running at ${server.url}`);

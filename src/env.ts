@@ -5,6 +5,7 @@ export const env = createEnv({
 	server: {
 		CREATE_CONSOLE_IN_PIPE: z.string().optional(),
 		FILES_ROOT: z.string().optional(),
+		MC_AUTO_START: z.string().optional(),
 		MC_CONSOLE_PIPE: z.string().optional(),
 		MC_LOG_PATH: z.string().optional(),
 		MC_LOG_TAIL_BYTES: z.string().optional(),
@@ -13,7 +14,6 @@ export const env = createEnv({
 		MC_SERVER_HOST: z.string().default("127.0.0.1"),
 		MC_SERVER_PORT: z.string().optional(),
 		SERVER_PORT: z.string().optional(),
-		MC_SHUTDOWN_REQUEST_PATH: z.string().optional(),
 		MC_SHUTDOWN_NOTICE: z.string().optional(),
 		RAILWAY_TCP_PROXY_DOMAIN: z.string().default(""),
 		RAILWAY_TCP_PROXY_PORT: z.string().default(""),
