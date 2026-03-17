@@ -10,13 +10,19 @@ import index from "./index.html";
 
 const MAX_PREVIEW_BYTES = 200_000;
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
-const FILES_ROOT = path.resolve("/data");
-const CONSOLE_PIPE = "/tmp/minecraft-console-in";
-const LOG_PATH = "/data/logs/latest.log";
+const FILES_ROOT = path.resolve(env.FILES_ROOT ?? "/data");
+const CONSOLE_PIPE = path.resolve(env.MC_CONSOLE_PIPE ?? "/tmp/minecraft-console-in");
+const LOG_PATH = path.resolve(env.MC_LOG_PATH ?? path.join(FILES_ROOT, "logs/latest.log"));
 const LOG_TAIL_BYTES = 20_000;
 const LOG_POLL_MS = 1000;
 const WS_AUTH_REVALIDATE_MS = 30_000;
 const MC_STATUS_CACHE_MS = 8000;
+const SHUTDOWN_REQUEST_PATH = path.resolve(
+	env.MC_SHUTDOWN_REQUEST_PATH ?? "/tmp/minecraft-poweroff-request.json",
+);
+const SHUTDOWN_NOTICE =
+	env.MC_SHUTDOWN_NOTICE ??
+	"Server powering off from the control dashboard. Rejoin after it is started again.";
 const RAILWAY_GRAPHQL_ENDPOINT = "https://backboard.railway.com/graphql/v2";
 const RAILWAY_OAUTH_ME_ENDPOINT = "https://backboard.railway.com/oauth/me";
 const RAILWAY_OAUTH_SCOPE = "openid profile email project:viewer";
@@ -304,17 +310,36 @@ const normalizeConsoleCommand = (command: string) =>
 	command.replace(/\r?\n/g, " ").trim();
 
 const getLogTailBytes = (value: string | null) => {
-	if (!value) return LOG_TAIL_BYTES;
+	if (!value) {
+		return getPositiveInt(env.MC_LOG_TAIL_BYTES, LOG_TAIL_BYTES, 0);
+	}
 	const parsed = Number.parseInt(value, 10);
-	if (Number.isNaN(parsed)) return LOG_TAIL_BYTES;
+	if (Number.isNaN(parsed)) {
+		return getPositiveInt(env.MC_LOG_TAIL_BYTES, LOG_TAIL_BYTES, 0);
+	}
 	return Math.max(0, parsed);
 };
 
 const getLogPollMs = (value: string | null) => {
-	if (!value) return LOG_POLL_MS;
+	if (!value) {
+		return getPositiveInt(env.MC_LOG_POLL_MS, LOG_POLL_MS, 250);
+	}
 	const parsed = Number.parseInt(value, 10);
-	if (Number.isNaN(parsed)) return LOG_POLL_MS;
+	if (Number.isNaN(parsed)) {
+		return getPositiveInt(env.MC_LOG_POLL_MS, LOG_POLL_MS, 250);
+	}
 	return Math.max(250, parsed);
+};
+
+const getPositiveInt = (
+	value: string | null | undefined,
+	fallback: number,
+	minimum = 1,
+) => {
+	if (!value) return fallback;
+	const parsed = Number.parseInt(value, 10);
+	if (Number.isNaN(parsed)) return fallback;
+	return Math.max(minimum, parsed);
 };
 
 const getMCServerPort = () => {
@@ -329,6 +354,9 @@ const getControlPort = () => {
 	const port = Number.parseInt(env.CONTROL_PORT ?? env.APP_PORT ?? "3000", 10);
 	return Number.isNaN(port) ? 3000 : port;
 };
+
+const getStatusCacheMs = () =>
+	getPositiveInt(env.MC_STATUS_CACHE_MS, MC_STATUS_CACHE_MS, 250);
 
 type ConsoleLogSocketData = {
 	tailBytes: number;
@@ -429,7 +457,7 @@ const readLogTail = async (bytes = 25_000) => {
 
 const fetchServerStatus = async () => {
 	const now = Date.now();
-	if (statusCache && now - statusCache.fetchedAt < MC_STATUS_CACHE_MS) {
+	if (statusCache && now - statusCache.fetchedAt < getStatusCacheMs()) {
 		return statusCache.data;
 	}
 	if (statusInFlight) return statusInFlight;
@@ -516,6 +544,36 @@ const sendLogLine = (
 		ws.send(line);
 	} catch {
 		// ignore
+	}
+};
+
+const readShutdownState = async () => {
+	try {
+		const raw = await Bun.file(SHUTDOWN_REQUEST_PATH).text();
+		if (!raw.trim()) {
+			return {
+				pending: true,
+				requestedAt: null as string | null,
+				requestedBy: null as string | null,
+			};
+		}
+		const parsed = JSON.parse(raw) as {
+			requestedAt?: string;
+			requestedBy?: string | null;
+		};
+		return {
+			pending: true,
+			requestedAt:
+				typeof parsed.requestedAt === "string" ? parsed.requestedAt : null,
+			requestedBy:
+				typeof parsed.requestedBy === "string" ? parsed.requestedBy : null,
+		};
+	} catch {
+		return {
+			pending: false,
+			requestedAt: null as string | null,
+			requestedBy: null as string | null,
+		};
 	}
 };
 
@@ -1282,7 +1340,7 @@ const server = Bun.serve<ConsoleLogSocketData>({
 					const data = await fetchServerStatus();
 					const cached =
 						statusCache &&
-						Date.now() - statusCache.fetchedAt < MC_STATUS_CACHE_MS + 250;
+						Date.now() - statusCache.fetchedAt < getStatusCacheMs() + 250;
 					return json({
 						ok: true,
 						data,
@@ -1310,6 +1368,61 @@ const server = Bun.serve<ConsoleLogSocketData>({
 							error instanceof Error ? error.message : "Status ping failed.",
 						fetchedAt: Date.now(),
 					});
+				}
+			},
+		},
+		"/api/server/poweroff": {
+			GET: async (req: Request) => {
+				const authError = await ensureAuth(req);
+				if (authError) return authError;
+				return json({ ok: true, ...(await readShutdownState()) });
+			},
+			POST: async (req: Request) => {
+				const authError = await ensureAuth(req);
+				if (authError) return authError;
+
+				try {
+					const existing = await readShutdownState();
+					if (existing.pending) {
+						return json({ ok: true, ...existing });
+					}
+
+					const accessToken = await getValidatedAccessToken(req);
+					let user: RailwayUserProfile | null = null;
+					if (accessToken) {
+						try {
+							user = await fetchRailwayUser(accessToken);
+						} catch {
+							user = null;
+						}
+					}
+					const requestedAt = new Date().toISOString();
+					await Bun.write(
+						SHUTDOWN_REQUEST_PATH,
+						JSON.stringify(
+							{
+								requestedAt,
+								requestedBy: user?.name ?? user?.email ?? null,
+								notice: SHUTDOWN_NOTICE,
+							},
+							null,
+							2,
+						),
+					);
+					return json({
+						ok: true,
+						pending: true,
+						requestedAt,
+						requestedBy: user?.name ?? user?.email ?? null,
+					});
+				} catch (error) {
+					return json(
+						{
+							error:
+								error instanceof Error ? error.message : "Power-off request failed.",
+						},
+						{ status: 400 },
+					);
 				}
 			},
 		},

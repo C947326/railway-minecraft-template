@@ -48,6 +48,9 @@ bun start
 - `MC_SERVER_HOST` (optional, default: `127.0.0.1`)
 - `MC_SERVER_PORT` (optional, default: `25565` or `SERVER_PORT`)
 - `MC_STATUS_CACHE_MS` (optional, default: `8000`)
+- `MC_SHUTDOWN_REQUEST_PATH` (optional, default: `/tmp/minecraft-poweroff-request.json`)
+- `MC_SHUTDOWN_NOTICE` (optional, default: a short shutdown message sent before stop)
+- `MC_SHUTDOWN_TIMEOUT_SECONDS` (optional, default: `45`)
 - `CONTROL_PORT` (optional, default: `3000`, keep different from Minecraft)
 
 If you override the pipe path, also set `CONSOLE_IN_NAMED_PIPE` for the
@@ -65,6 +68,16 @@ command options: https://docker-minecraft-server.readthedocs.io/en/latest/sendin
 
 ## Notes
 
+- `Power off` in the dashboard requests a graceful Minecraft shutdown and then
+  exits the whole Railway service. That is what actually reduces idle spend;
+  stopping only the Java process would still leave the Bun control UI running.
+- Because the dashboard lives inside the same container, it will disappear once
+  the service powers off. Start the Railway service again from Railway before
+  returning to the dashboard.
+- For a light vanilla server with 3 total players, start with Railway replica
+  limits around `0.5 vCPU` and `1-2 GB RAM`. `1 GB` is often enough for an
+  otherwise quiet vanilla world; use `2 GB` if you expect newer versions,
+  larger view distances, or mods/plugins.
 - The auth guard is a placeholder that always allows access.
 - File preview is limited to small text files.
 

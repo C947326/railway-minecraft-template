@@ -6,6 +6,7 @@ import {
 	FileText,
 	Folder,
 	LogOut,
+	Power,
 	RefreshCw,
 	Terminal as TerminalIcon,
 	Trash2,
@@ -264,6 +265,9 @@ function App() {
 		error?: string;
 		fetchedAt?: number;
 	} | null>(null);
+	const [poweroffPending, setPoweroffPending] = useState(false);
+	const [poweroffDialogOpen, setPoweroffDialogOpen] = useState(false);
+	const [poweroffError, setPoweroffError] = useState<string | null>(null);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const folderInputRef = useRef<HTMLInputElement>(null);
@@ -575,6 +579,43 @@ function App() {
 		return () => {
 			cancelled = true;
 			if (timer) window.clearInterval(timer);
+		};
+	}, [apiFetch, isAuthenticated]);
+
+	useEffect(() => {
+		if (!isAuthenticated) return;
+		let cancelled = false;
+
+		const fetchPoweroffState = async () => {
+			try {
+				const res = await apiFetch("/api/server/poweroff");
+				const payload = (await res.json()) as
+					| { ok: true; pending: boolean }
+					| { ok?: false; error?: string };
+
+				if (!res.ok || !payload.ok) {
+					throw new Error(
+						"error" in payload && payload.error
+							? payload.error
+							: "Failed to read server power state.",
+					);
+				}
+
+				if (cancelled) return;
+				setPoweroffPending(Boolean(payload.pending));
+			} catch (error) {
+				if (cancelled) return;
+				setPoweroffError(
+					error instanceof Error
+						? error.message
+						: "Failed to read server power state.",
+				);
+			}
+		};
+
+		void fetchPoweroffState();
+		return () => {
+			cancelled = true;
 		};
 	}, [apiFetch, isAuthenticated]);
 
@@ -1022,6 +1063,31 @@ function App() {
 		setAuthError(null);
 	};
 
+	const handlePoweroff = async () => {
+		setPoweroffError(null);
+		try {
+			const res = await apiFetch("/api/server/poweroff", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({}),
+			});
+			const payload = (await res.json().catch(() => ({}))) as {
+				ok?: boolean;
+				pending?: boolean;
+				error?: string;
+			};
+			if (!res.ok || !payload.ok) {
+				throw new Error(payload.error ?? "Power-off request failed.");
+			}
+			setPoweroffPending(Boolean(payload.pending));
+			setPoweroffDialogOpen(false);
+		} catch (error) {
+			setPoweroffError(
+				error instanceof Error ? error.message : "Power-off request failed.",
+			);
+		}
+	};
+
 	const userInitial = useMemo(
 		() => authUserName.trim().charAt(0).toUpperCase() || "P",
 		[authUserName],
@@ -1164,6 +1230,16 @@ function App() {
 											<RefreshCw className="h-4 w-4 opacity-80" />
 											Refresh
 										</Button>
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-9 rounded-full border-destructive/35 bg-destructive/10 px-4 text-destructive hover:bg-destructive/15"
+											onClick={() => setPoweroffDialogOpen(true)}
+											disabled={poweroffPending}
+										>
+											<Power className="h-4 w-4 opacity-80" />
+											{poweroffPending ? "Powering off" : "Power off"}
+										</Button>
 									</div>
 								</div>
 
@@ -1212,6 +1288,19 @@ function App() {
 									{serverStatusMeta?.error ? (
 										<div className="dash-mutedbox text-destructive">
 											{serverStatusMeta.error}
+										</div>
+									) : null}
+
+									{poweroffPending ? (
+										<div className="dash-mutedbox border-destructive/40 text-destructive">
+											Shutdown requested. Minecraft will stop cleanly, then this
+											Railway service will exit.
+										</div>
+									) : null}
+
+									{poweroffError ? (
+										<div className="dash-mutedbox text-destructive">
+											{poweroffError}
 										</div>
 									) : null}
 
@@ -1539,6 +1628,36 @@ function App() {
 							</div>
 						</aside>
 					</section>
+
+				<AlertDialog
+					open={poweroffDialogOpen}
+					onOpenChange={setPoweroffDialogOpen}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Power off server?</AlertDialogTitle>
+							<AlertDialogDescription>
+								This sends Minecraft a clean stop command, then exits the Railway
+								service to cut idle usage. You will need to start the service
+								again from Railway before the dashboard returns.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel disabled={poweroffPending}>
+								Cancel
+							</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={(event) => {
+									event.preventDefault();
+									void handlePoweroff();
+								}}
+								disabled={poweroffPending}
+							>
+								{poweroffPending ? "Powering off..." : "Power off"}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 
 				<AlertDialog
 					open={Boolean(deleteTarget)}
