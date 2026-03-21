@@ -19,6 +19,7 @@ export const env = createEnv({
 		RAILWAY_TCP_PROXY_PORT: z.string().default(""),
 		RAILWAY_PUBLIC_DOMAIN: z.string(),
 		RAILWAY_SERVICE_ID: z.string(),
+		PORT: z.string().optional(),
 		CONTROL_PORT: z.string().optional(),
 		APP_PORT: z.string().optional(),
 		RCON_HOST: z.string().optional(),

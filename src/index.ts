@@ -353,7 +353,10 @@ const getMCServerPort = () => {
 };
 
 const getControlPort = () => {
-	const port = Number.parseInt(env.CONTROL_PORT ?? env.APP_PORT ?? "3000", 10);
+	const port = Number.parseInt(
+		env.PORT ?? env.CONTROL_PORT ?? env.APP_PORT ?? "3000",
+		10,
+	);
 	return Number.isNaN(port) ? 3000 : port;
 };
 
@@ -1119,6 +1122,7 @@ const getRailwayOAuthClient = async () => {
 };
 
 const server = Bun.serve<ConsoleLogSocketData>({
+	hostname: "0.0.0.0",
 	port: getControlPort(),
 	maxRequestBodySize: MAX_UPLOAD_BYTES,
 	routes: {
