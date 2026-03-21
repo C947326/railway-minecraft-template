@@ -21,6 +21,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionType;
 
 final class WorldSeedService {
     private final FugitiveBaronPlugin plugin;
@@ -369,13 +372,14 @@ final class WorldSeedService {
         placeBarrel(world.getBlockAt(baseX + 7, baseY + 1, baseZ + 3), "Liquor Shelf", List.of(
             WorldContentLibrary.liquorBook(),
             new ItemStack(Material.GLASS_BOTTLE, 4),
-            new ItemStack(Material.POTION, 2),
+            potion(Material.POTION, PotionType.STRENGTH, 2),
             new ItemStack(Material.COOKED_BEEF, 2)
         ));
 
         placeBarrel(world.getBlockAt(baseX + 7, baseY, baseZ + 8), "Concealed Stash", List.of(
             new ItemStack(Material.COMPASS, 1),
             new ItemStack(Material.SPYGLASS, 1),
+            namedItem(Material.TURTLE_HELMET, "Surveillance Helmet"),
             new ItemStack(Material.GUNPOWDER, 16),
             WorldContentLibrary.escapeNotePaper(),
             new ItemStack(Material.IRON_INGOT, 2)
@@ -499,8 +503,12 @@ final class WorldSeedService {
         placeChest(world.getBlockAt(baseX + 5, baseY + 1, baseZ + 1), variant.name() + " Back Room", List.of(
             WorldContentLibrary.repaymentCertificate(),
             new ItemStack(Material.DIAMOND, ThreadLocalRandom.current().nextInt(1, 4)),
+            namedItem(Material.NETHERITE_SWORD, "Collector's Measure"),
+            namedItem(Material.NETHERITE_AXE, "Negotiation Aid"),
             new ItemStack(Material.GUNPOWDER, ThreadLocalRandom.current().nextInt(4, 10)),
-            new ItemStack(Material.POTION, 2)
+            potion(Material.POTION, PotionType.STRONG_HEALING, 1),
+            potion(Material.SPLASH_POTION, PotionType.STRONG_SWIFTNESS, 1),
+            potion(Material.POTION, PotionType.LONG_FIRE_RESISTANCE, 1)
         ));
         placeLectern(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 4), WorldContentLibrary.softwareBook());
         painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 4), Material.JUKEBOX);
@@ -711,6 +719,25 @@ final class WorldSeedService {
         for (final ItemStack item : items) {
             inventory.addItem(item.clone());
         }
+    }
+
+    private ItemStack potion(final Material material, final PotionType potionType, final int amount) {
+        final ItemStack item = new ItemStack(material, amount);
+        if (item.getItemMeta() instanceof PotionMeta meta) {
+            meta.setBasePotionType(potionType);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack namedItem(final Material material, final String name) {
+        final ItemStack item = new ItemStack(material, 1);
+        final ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(name));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private List<ItemStack> createTechtonicCrateLoot() {
