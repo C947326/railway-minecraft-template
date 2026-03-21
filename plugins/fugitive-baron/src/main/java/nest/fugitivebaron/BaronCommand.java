@@ -105,7 +105,9 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 player.getInventory().addItem(plugin.createDragonRadar());
-                sender.sendMessage(Component.text("The Brothel Radar flickers and settles on " + hideoutService.enabledHideoutIds() + ".", NamedTextColor.GREEN));
+                plugin.refreshRadar(player);
+                sender.sendMessage(Component.text("A replacement Brothel Radar crackles back to life.", NamedTextColor.GREEN));
+                sender.sendMessage(worldSeedService.radarSummaryFor(player));
                 return true;
             }
             case "hideout" -> {

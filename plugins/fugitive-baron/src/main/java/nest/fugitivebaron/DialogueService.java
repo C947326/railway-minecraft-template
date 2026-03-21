@@ -15,6 +15,7 @@ final class DialogueService {
     private long lineCooldownTicks;
     private long nextEligibleTick;
     private String subtitleMode;
+    private boolean archiveDialogueToChat;
     private boolean playVoiceAudio;
     private float voiceVolume;
     private float voicePitch;
@@ -27,6 +28,7 @@ final class DialogueService {
     void reload(final FileConfiguration config) {
         this.lineCooldownTicks = config.getLong("encounter.line-cooldown-ticks", 80L);
         this.subtitleMode = config.getString("encounter.subtitle-mode", "both").toLowerCase();
+        this.archiveDialogueToChat = config.getBoolean("encounter.archive-dialogue-to-chat", true);
         this.playVoiceAudio = config.getBoolean("encounter.play-voice-audio", true);
         this.voiceVolume = (float) config.getDouble("encounter.voice-volume", 1.0D);
         this.voicePitch = (float) config.getDouble("encounter.voice-pitch", 1.0D);
@@ -80,7 +82,7 @@ final class DialogueService {
         if (!"chat".equals(subtitleMode)) {
             player.sendActionBar(subtitle);
         }
-        if (!"actionbar".equals(subtitleMode)) {
+        if (archiveDialogueToChat || !"actionbar".equals(subtitleMode)) {
             player.sendMessage(subtitle);
         }
     }

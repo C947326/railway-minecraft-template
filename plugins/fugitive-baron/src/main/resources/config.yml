@@ -16,6 +16,7 @@ encounter:
   line-cooldown-ticks: 80
   interact-cooldown-ticks: 40
   subtitle-mode: "both"
+  archive-dialogue-to-chat: true
   play-voice-audio: true
   voice-volume: 1.0
   voice-pitch: 1.0

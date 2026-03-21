@@ -61,6 +61,7 @@ final class WorldContentLibrary {
                 "He rented the upstairs room, insulted the weather, and kept asking which ridge had the cleanest view of the sky.",
                 "The girls say he left with copper, maps, and panic. The next whisper points outward toward the hills.",
                 List.of("Madam Sable", "Escort Inez", "Dancer Mirelle", "Escort Celeste", "Bartender June"),
+                List.of("Ari", "Kai", "Makena", "Noor", "Sunny"),
                 List.of(
                     "John's a lovely bloke. Strange as mercury, but soft-hearted after midnight.",
                     "Odd little man. Tips like a king, sleeps like a hunted rat.",
@@ -75,6 +76,7 @@ final class WorldContentLibrary {
                 "He bought the house a round, paid in emeralds, and asked whether anyone here knew the road away from creditors and church bells.",
                 "A bookkeeper heard him muttering about the ridge antenna and the need to get above the town lights.",
                 List.of("Madam Pearl", "Dancer Ada", "Escort Ruth", "Bartender Sybil", "Bouncer Brigid"),
+                List.of("Steve", "Alex", "Efe", "Zuri", "Kai"),
                 List.of(
                     "John's a decent soul buried under whisky, paranoia, and very expensive mistakes.",
                     "He smiles like a gentleman and vanishes like a pickpocket.",
@@ -179,6 +181,14 @@ final class WorldContentLibrary {
     record BoardVariant(String name, String header, String sighting, String warning, String comic, String witness) {
     }
 
-    record ViceVariant(String id, String name, String clue, String nextLead, List<String> npcNames, List<String> npcQuips) {
+    record ViceVariant(
+        String id,
+        String name,
+        String clue,
+        String nextLead,
+        List<String> npcNames,
+        List<String> npcSkinNames,
+        List<String> npcQuips
+    ) {
     }
 }

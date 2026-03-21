@@ -16,7 +16,7 @@ import org.bukkit.block.Chest;
 import org.bukkit.block.Lectern;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Directional;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.Villager;
@@ -38,6 +38,8 @@ final class WorldSeedService {
     private final SettlementLocator settlementLocator;
     private final StructurePainter painter;
     private final List<ViceSite> viceSites = new ArrayList<>();
+    private CitizensViceStaffSupport citizensViceStaffSupport;
+    private boolean citizensViceStaffUnavailable;
 
     WorldSeedService(
         final FugitiveBaronPlugin plugin,
@@ -50,6 +52,13 @@ final class WorldSeedService {
         this.seedStateRepository = new SeedStateRepository(plugin);
         this.settlementLocator = new SettlementLocator(plugin);
         this.painter = new StructurePainter();
+        if (plugin.getServer().getPluginManager().getPlugin("Citizens") != null) {
+            try {
+                this.citizensViceStaffSupport = new CitizensViceStaffSupport(plugin);
+            } catch (final Throwable throwable) {
+                disableCitizensViceStaff("initialization", throwable);
+            }
+        }
         restoreOverrides();
         restoreViceSites();
     }
@@ -638,12 +647,18 @@ final class WorldSeedService {
         if (world == null) {
             return;
         }
+        if (hasCitizensViceStaffSupport()) {
+            try {
+                citizensViceStaffSupport.clearViceStaff(location, 64.0D, VICE_STAFF_TAG);
+            } catch (final Throwable throwable) {
+                disableCitizensViceStaff("vice-site cleanup", throwable);
+            }
+        }
         for (final Villager villager : world.getEntitiesByClass(Villager.class)) {
             if (villager.getLocation().distanceSquared(location) > 64.0D) {
                 continue;
             }
-            final Component customName = villager.customName();
-            if (customName == null) {
+            if (!villager.getScoreboardTags().contains(VICE_STAFF_TAG)) {
                 continue;
             }
             villager.remove();
@@ -676,26 +691,32 @@ final class WorldSeedService {
             final double[] pad = pads[index % pads.length];
             final Location npcLocation = location.clone().add(pad[0], pad[1], pad[2]);
             final String quip = variant.npcQuips().get(index % variant.npcQuips().size());
+            final String skinName = variant.npcSkinNames().get(index % variant.npcSkinNames().size());
+            final int styleIndex = index;
+            npcLocation.setYaw((float) (ThreadLocalRandom.current().nextDouble(360.0D) - 180.0D));
             index++;
-            world.spawn(npcLocation, Villager.class, villager -> {
-                villager.customName(Component.text(npcName, NamedTextColor.LIGHT_PURPLE));
-                villager.setCustomNameVisible(true);
-                villager.setPersistent(true);
-                villager.setRemoveWhenFarAway(false);
-                villager.setVillagerExperience(0);
-                villager.setCanPickupItems(false);
-                villager.setProfession(Villager.Profession.NONE);
-                villager.setAdult();
-                villager.setAI(false);
-                villager.setInvulnerable(true);
-                villager.setCollidable(false);
-                villager.setSilent(true);
-                villager.addScoreboardTag(VICE_STAFF_TAG);
-            });
+            if (!spawnViceStaffEntity(npcLocation, npcName, skinName)) {
+                world.spawn(npcLocation, Villager.class, villager -> {
+                    villager.customName(Component.text(npcName, NamedTextColor.LIGHT_PURPLE));
+                    villager.setCustomNameVisible(true);
+                    villager.setPersistent(true);
+                    villager.setRemoveWhenFarAway(false);
+                    villager.setVillagerExperience(0);
+                    villager.setCanPickupItems(false);
+                    villager.setProfession(styleIndex % 2 == 0 ? Villager.Profession.CLERIC : Villager.Profession.LIBRARIAN);
+                    villager.setVillagerType(styleIndex % 2 == 0 ? Villager.Type.SAVANNA : Villager.Type.TAIGA);
+                    villager.setAdult();
+                    villager.setAI(false);
+                    villager.setInvulnerable(true);
+                    villager.setCollidable(false);
+                    villager.setSilent(true);
+                    villager.addScoreboardTag(VICE_STAFF_TAG);
+                });
+            }
             world.spawn(npcLocation.clone().add(0.0D, 2.35D, 0.0D), TextDisplay.class, display -> {
                 display.text(Component.text('"' + quip + '"', NamedTextColor.WHITE));
                 display.setPersistent(true);
-                display.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
+                display.setBillboard(Display.Billboard.CENTER);
                 display.setSeeThrough(true);
                 display.setShadowed(false);
                 display.setDefaultBackground(false);
@@ -703,6 +724,36 @@ final class WorldSeedService {
                 display.addScoreboardTag(VICE_QUIP_TAG);
             });
         }
+    }
+
+    private boolean spawnViceStaffEntity(final Location npcLocation, final String npcName, final String skinName) {
+        if (!hasCitizensViceStaffSupport()) {
+            return false;
+        }
+        try {
+            citizensViceStaffSupport.spawnViceStaff(npcLocation, npcName, skinName, VICE_STAFF_TAG);
+            return true;
+        } catch (final Throwable throwable) {
+            disableCitizensViceStaff("vice-site spawn", throwable);
+            return false;
+        }
+    }
+
+    private boolean hasCitizensViceStaffSupport() {
+        return !citizensViceStaffUnavailable && citizensViceStaffSupport != null && citizensViceStaffSupport.isAvailable();
+    }
+
+    private void disableCitizensViceStaff(final String phase, final Throwable throwable) {
+        if (citizensViceStaffUnavailable) {
+            return;
+        }
+        citizensViceStaffUnavailable = true;
+        citizensViceStaffSupport = null;
+        plugin.getLogger().warning(
+            "Disabling Citizens vice-staff integration during " + phase + ": "
+                + throwable.getClass().getSimpleName()
+                + (throwable.getMessage() == null || throwable.getMessage().isBlank() ? "" : " - " + throwable.getMessage())
+        );
     }
 
     private RadarSignal toRadarSignal(final Location playerLocation, final ViceSite site) {
@@ -800,9 +851,18 @@ final class WorldSeedService {
 
     private void placeLectern(final Block block, final ItemStack book) {
         block.setType(Material.LECTERN, false);
+        fillLectern(block, book);
+        plugin.getServer().getScheduler().runTask(plugin, () -> fillLectern(block, book));
+    }
+
+    private void fillLectern(final Block block, final ItemStack book) {
         if (block.getState() instanceof Lectern lectern) {
-            lectern.getInventory().setItem(0, book);
             lectern.update(true, true);
+            if (block.getState() instanceof Lectern placedLectern) {
+                placedLectern.getInventory().setItem(0, book.clone());
+                placedLectern.update(true, true);
+                plugin.debugLog("Filled lectern with '" + (book.getItemMeta() != null ? book.getItemMeta().getDisplayName() : book.getType()) + "' at " + format(block.getLocation()));
+            }
         }
     }
 

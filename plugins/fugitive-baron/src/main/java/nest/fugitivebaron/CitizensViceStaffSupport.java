@@ -1,0 +1,94 @@
+package nest.fugitivebaron;
+
+import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.npc.NPC;
+import net.citizensnpcs.api.npc.NPCRegistry;
+import net.citizensnpcs.trait.GameModeTrait;
+import net.citizensnpcs.trait.SkinLayers;
+import net.citizensnpcs.trait.SkinTrait;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+
+final class CitizensViceStaffSupport {
+    private final FugitiveBaronPlugin plugin;
+
+    CitizensViceStaffSupport(final FugitiveBaronPlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    boolean isAvailable() {
+        return registry() != null;
+    }
+
+    void clearViceStaff(final Location center, final double radiusSquared, final String scoreboardTag) {
+        final NPCRegistry registry = registry();
+        if (registry == null || center.getWorld() == null) {
+            return;
+        }
+
+        for (final NPC npc : registry) {
+            if (!npc.isSpawned()) {
+                continue;
+            }
+            final Entity entity = npc.getEntity();
+            if (entity == null || entity.getWorld() != center.getWorld()) {
+                continue;
+            }
+            if (!entity.getScoreboardTags().contains(scoreboardTag)) {
+                continue;
+            }
+            if (entity.getLocation().distanceSquared(center) > radiusSquared) {
+                continue;
+            }
+            npc.destroy();
+        }
+    }
+
+    void spawnViceStaff(final Location location, final String displayName, final String skinName, final String scoreboardTag) {
+        final NPCRegistry registry = registry();
+        if (registry == null) {
+            throw new IllegalStateException("Citizens is not available for vice-site staff.");
+        }
+
+        final NPC npc = registry.createNPC(EntityType.PLAYER, displayName);
+        npc.setProtected(true);
+        npc.setFlyable(false);
+        npc.getOrAddTrait(GameModeTrait.class).setGameMode(GameMode.SURVIVAL);
+        npc.getOrAddTrait(SkinLayers.class).show();
+
+        final SkinTrait skinTrait = npc.getOrAddTrait(SkinTrait.class);
+        if (skinName != null && !skinName.isBlank()) {
+            skinTrait.setSkinName(skinName, true);
+        } else {
+            skinTrait.setFetchDefaultSkin(true);
+        }
+
+        if (!npc.spawn(location)) {
+            npc.destroy();
+            throw new IllegalStateException("Citizens failed to spawn vice-site staffer " + displayName + ".");
+        }
+
+        if (npc.getEntity() instanceof LivingEntity livingEntity) {
+            livingEntity.setPersistent(true);
+            livingEntity.setCanPickupItems(false);
+            livingEntity.setCollidable(false);
+            livingEntity.setSilent(true);
+            livingEntity.addScoreboardTag(scoreboardTag);
+            livingEntity.setRotation(location.getYaw(), location.getPitch());
+            return;
+        }
+
+        npc.destroy();
+        throw new IllegalStateException("Citizens spawned non-living vice-site staff.");
+    }
+
+    private NPCRegistry registry() {
+        if (plugin.getServer().getPluginManager().getPlugin("Citizens") == null) {
+            return null;
+        }
+        return CitizensAPI.getNPCRegistry();
+    }
+}
