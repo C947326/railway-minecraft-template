@@ -1,6 +1,7 @@
 FROM oven/bun:latest AS builder
 
 WORKDIR /build
+ARG CITIZENS_VERSION=2.0.41-SNAPSHOT
 COPY package.json bun.lock ./
 RUN bun install
 
@@ -11,6 +12,7 @@ COPY bunfig.toml tsconfig.json postcss.config.cjs tailwind.config.ts components.
 
 RUN bunx tailwindcss -c tailwind.config.ts -i src/index.css -o src/tailwind.css --minify
 RUN bun run baron:pack-resource-pack
+RUN bun -e 'const version = process.env.CITIZENS_VERSION; const base = `https://maven.citizensnpcs.co/repo/net/citizensnpcs/citizens-main/${version}`; const metadata = await fetch(`${base}/maven-metadata.xml`).then(r => { if (!r.ok) throw new Error(`metadata ${r.status}`); return r.text(); }); const value = metadata.match(/<value>([^<]+)<\\/value>/)?.[1]; if (!value) throw new Error("missing snapshot value"); const jarName = `citizens-main-${value}.jar`; const jar = await fetch(`${base}/${jarName}`).then(r => { if (!r.ok) throw new Error(`jar ${r.status}`); return r.arrayBuffer(); }); await Bun.write("/build/Citizens.jar", jar);'
 RUN bun build ./src/index.ts --compile --outfile=server
 
 FROM gradle:8.14.3-jdk21 AS plugin-builder
@@ -24,13 +26,12 @@ RUN gradle --no-daemon build
 FROM itzg/minecraft-server:latest
 
 ENV CONTROL_PORT=3000
-ARG CITIZENS_VERSION=2.0.41-SNAPSHOT
 
 WORKDIR /app
 COPY --from=builder /build/server ./server
 COPY --from=builder /build/plugins/fugitive-baron/fugitive-baron-resource-pack.zip /app/resource-pack/fugitive-baron-resource-pack.zip
+COPY --from=builder /build/Citizens.jar /app/plugins-bundled/Citizens.jar
 COPY --from=plugin-builder /build/plugins/fugitive-baron/build/libs/*.jar /app/plugins-bundled/
-ADD https://maven.citizensnpcs.co/repo/net/citizensnpcs/citizens/${CITIZENS_VERSION}/citizens-${CITIZENS_VERSION}.jar /app/plugins-bundled/Citizens.jar
 COPY docker/start.sh /app/docker/start.sh
 
 RUN chmod +x /app/docker/start.sh
