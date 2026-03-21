@@ -37,6 +37,7 @@ final class WorldSeedService {
     private static final int DEFAULT_MAX_HUNT_CYCLES = 3;
     private static final String VICE_STAFF_TAG = "vice_staff";
     private static final String VICE_QUIP_TAG = "vice_quip";
+    private static final long VICE_QUIP_LIFETIME_TICKS = 80L;
     private static final long VICE_STAFF_MOVE_INTERVAL_TICKS = 80L;
     private static final long VICE_STAFF_AMBIENT_INTERVAL_TICKS = 140L;
 
@@ -370,6 +371,7 @@ final class WorldSeedService {
         final String line = variant.npcQuips().get(ThreadLocalRandom.current().nextInt(variant.npcQuips().size()));
         plugin.dialogueService().deliverWitnessLine(player, speaker, line, null, currentTick);
         entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_VILLAGER_AMBIENT, SoundCategory.NEUTRAL, 0.9F, randomPitch());
+        showViceQuip(entity, line);
         faceViceStaff(entity, player.getLocation());
         viceStaffInteractionCooldowns.put(player.getUniqueId(), currentTick + 20L);
     }
@@ -827,7 +829,6 @@ final class WorldSeedService {
         for (final String npcName : variant.npcNames()) {
             final double[] pad = pads[index % pads.length];
             final Location npcLocation = safeViceStaffLocation(location.clone().add(pad[0], pad[1], pad[2]));
-            final String quip = variant.npcQuips().get(index % variant.npcQuips().size());
             final String skinName = variant.npcSkinNames().get(index % variant.npcSkinNames().size());
             final int styleIndex = index;
             npcLocation.setYaw((float) (ThreadLocalRandom.current().nextDouble(360.0D) - 180.0D));
@@ -850,17 +851,31 @@ final class WorldSeedService {
                     villager.addScoreboardTag(VICE_STAFF_TAG);
                 });
             }
-            world.spawn(npcLocation.clone().add(0.0D, 2.35D, 0.0D), TextDisplay.class, display -> {
-                display.text(Component.text('"' + quip + '"', NamedTextColor.WHITE));
-                display.setPersistent(true);
-                display.setBillboard(Display.Billboard.CENTER);
-                display.setSeeThrough(true);
-                display.setShadowed(false);
-                display.setDefaultBackground(false);
-                display.setLineWidth(220);
-                display.addScoreboardTag(VICE_QUIP_TAG);
-            });
         }
+    }
+
+    private void showViceQuip(final Entity entity, final String quip) {
+        final World world = entity.getWorld();
+        for (final TextDisplay display : world.getEntitiesByClass(TextDisplay.class)) {
+            if (display.getLocation().distanceSquared(entity.getLocation()) > 4.0D) {
+                continue;
+            }
+            if (!display.getScoreboardTags().contains(VICE_QUIP_TAG)) {
+                continue;
+            }
+            display.remove();
+        }
+        world.spawn(entity.getLocation().clone().add(0.0D, 2.35D, 0.0D), TextDisplay.class, display -> {
+            display.text(Component.text('"' + quip + '"', NamedTextColor.WHITE));
+            display.setPersistent(false);
+            display.setBillboard(Display.Billboard.CENTER);
+            display.setSeeThrough(true);
+            display.setShadowed(false);
+            display.setDefaultBackground(false);
+            display.setLineWidth(220);
+            display.addScoreboardTag(VICE_QUIP_TAG);
+            plugin.getServer().getScheduler().runTaskLater(plugin, display::remove, VICE_QUIP_LIFETIME_TICKS);
+        });
     }
 
     private Location safeViceStaffLocation(final Location preferred) {

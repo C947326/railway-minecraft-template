@@ -13,6 +13,8 @@ import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 final class CitizensViceStaffSupport {
     private final FugitiveBaronPlugin plugin;
@@ -74,6 +76,8 @@ final class CitizensViceStaffSupport {
         }
 
         if (npc.getEntity() instanceof LivingEntity livingEntity) {
+            livingEntity.customName(Component.text(displayName, NamedTextColor.LIGHT_PURPLE));
+            livingEntity.setCustomNameVisible(true);
             livingEntity.setPersistent(true);
             livingEntity.setCanPickupItems(false);
             livingEntity.setCollidable(false);
