@@ -53,6 +53,25 @@ final class WorldContentLibrary {
         );
     }
 
+    static List<ViceVariant> viceVariants() {
+        return List.of(
+            new ViceVariant(
+                "velvet_lantern",
+                "Velvet Lantern",
+                "He rented the upstairs room, insulted the weather, and kept asking which ridge had the cleanest view of the sky.",
+                "The girls say he left with copper, maps, and panic. The next whisper points outward toward the hills.",
+                List.of("Madam Sable", "Hostess Inez", "Hostess Mirelle", "Bartender June")
+            ),
+            new ViceVariant(
+                "dockside_parlour",
+                "Dockside Parlour",
+                "He bought the house a round, paid in emeralds, and asked whether anyone here knew the road away from creditors and church bells.",
+                "A bookkeeper heard him muttering about the ridge antenna and the need to get above the town lights.",
+                List.of("Madam Pearl", "Hostess Ada", "Bartender Ruth", "Bouncer Brigid")
+            )
+        );
+    }
+
     static ItemStack antennaCoreBook() {
         return writtenBook(
             "To The Men Still Pretending This Is About Accounting",
@@ -144,5 +163,8 @@ final class WorldContentLibrary {
     }
 
     record BoardVariant(String name, String header, String sighting, String warning, String comic, String witness) {
+    }
+
+    record ViceVariant(String id, String name, String clue, String nextLead, List<String> npcNames) {
     }
 }

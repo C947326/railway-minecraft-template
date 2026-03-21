@@ -1,6 +1,9 @@
 package nest.fugitivebaron;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -14,31 +17,51 @@ import org.bukkit.block.Container;
 import org.bukkit.block.Lectern;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Directional;
-import org.bukkit.command.CommandSender;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 final class WorldSeedService {
     private final FugitiveBaronPlugin plugin;
     private final HideoutService hideoutService;
+    private final FugitiveBaronController controller;
     private final SeedStateRepository seedStateRepository;
     private final SettlementLocator settlementLocator;
     private final StructurePainter painter;
+    private final List<ViceSite> viceSites = new ArrayList<>();
 
-    WorldSeedService(final FugitiveBaronPlugin plugin, final HideoutService hideoutService) {
+    WorldSeedService(
+        final FugitiveBaronPlugin plugin,
+        final HideoutService hideoutService,
+        final FugitiveBaronController controller
+    ) {
         this.plugin = plugin;
         this.hideoutService = hideoutService;
+        this.controller = controller;
         this.seedStateRepository = new SeedStateRepository(plugin);
         this.settlementLocator = new SettlementLocator(plugin);
         this.painter = new StructurePainter();
+        restoreOverrides();
+        restoreViceSites();
     }
 
     Component seedStatus() {
+        final boolean baronSpawned = controller.hasBaron();
+        final Location baronLocation = controller.getBaronLocation();
+        final String baronStatus = baronSpawned
+            ? "spawned(" + controller.state().name().toLowerCase() + " at " + format(baronLocation) + ")"
+            : "not-spawned";
         return Component.text(
             "Seed status: antenna="
                 + seedStateRepository.isAntennaSeeded()
                 + " boards="
                 + seedStateRepository.rumorBoardCount()
+                + " vice="
+                + seedStateRepository.viceSiteCount()
+                + " baron="
+                + baronStatus
                 + " version="
                 + seedStateRepository.seedVersion(),
             NamedTextColor.YELLOW
@@ -46,6 +69,10 @@ final class WorldSeedService {
     }
 
     Component seedAntennaNest() {
+        return seedAntennaNest(false);
+    }
+
+    Component seedAntennaNest(final boolean spawnBaron) {
         final Hideout active = hideoutService.activeHideout();
         if (active == null) {
             return Component.text("No active hideout is configured.", NamedTextColor.RED);
@@ -55,13 +82,64 @@ final class WorldSeedService {
             return Component.text("Active hideout world is unavailable.", NamedTextColor.RED);
         }
 
-        final Location base = location.clone();
-        base.setX(Math.floor(base.getX()));
-        base.setZ(Math.floor(base.getZ()));
+        final Location base = chooseSeedLocation(active, location);
         seedAntenna(base);
+        hideoutService.setLocationOverride(active.id(), base);
         seedStateRepository.markAntennaSeeded(base);
+        String suffix = "";
+        if (spawnBaron) {
+            controller.spawnBaronAtActiveHideout();
+            suffix = " John spawned inside.";
+            plugin.debugLog("Spawned Baron as part of antenna seeding.");
+        }
         plugin.debugLog("Seeded Antenna Nest at " + format(base));
-        return Component.text("Seeded Antenna Nest at " + format(base) + ".", NamedTextColor.GREEN);
+        return Component.text("Seeded Antenna Nest at " + format(base) + "." + suffix, NamedTextColor.GREEN);
+    }
+
+    private void restoreOverrides() {
+        final Location antenna = seedStateRepository.antennaLocation(plugin);
+        if (antenna != null) {
+            hideoutService.setLocationOverride("antenna_nest", antenna);
+        }
+    }
+
+    private Location chooseSeedLocation(final Hideout hideout, final Location configured) {
+        final Location candidate = configured.clone();
+        candidate.setX(Math.floor(candidate.getX()));
+        candidate.setZ(Math.floor(candidate.getZ()));
+
+        if (!"antenna_nest".equalsIgnoreCase(hideout.id()) || configured.getWorld() == null) {
+            candidate.setY(configured.getWorld() == null ? configured.getY() : configured.getWorld().getHighestBlockYAt(candidate) + 1);
+            return candidate;
+        }
+
+        final World world = configured.getWorld();
+        final Location spawn = world.getSpawnLocation();
+        final double dx = candidate.getX() - spawn.getX();
+        final double dz = candidate.getZ() - spawn.getZ();
+        final double distance = Math.sqrt(dx * dx + dz * dz);
+
+        if (distance >= 500.0D && distance <= 1500.0D) {
+            candidate.setY(world.getHighestBlockYAt(candidate) + 1);
+            return candidate;
+        }
+
+        double nx = dx;
+        double nz = dz;
+        if (Math.abs(nx) < 0.01D && Math.abs(nz) < 0.01D) {
+            nx = 1.0D;
+            nz = -0.6D;
+        }
+        final double length = Math.sqrt(nx * nx + nz * nz);
+        nx /= length;
+        nz /= length;
+
+        final double targetDistance = distance < 500.0D ? 900.0D : 1200.0D;
+        final double x = spawn.getX() + nx * targetDistance;
+        final double z = spawn.getZ() + nz * targetDistance;
+        final Location relocated = new Location(world, Math.floor(x), 0, Math.floor(z));
+        relocated.setY(world.getHighestBlockYAt(relocated) + 1);
+        return relocated;
     }
 
     Component seedBoards() {
@@ -99,6 +177,117 @@ final class WorldSeedService {
         );
     }
 
+    Component seedAll(final boolean spawnBaron) {
+        final Component antennaResult = seedAntennaNest(spawnBaron);
+        final Component boardsResult = seedBoards();
+        final Component viceResult = seedViceSites();
+        return Component.text()
+            .append(Component.text("Seed all complete. ", NamedTextColor.GREEN))
+            .append(antennaResult)
+            .append(Component.text(" ", NamedTextColor.GRAY))
+            .append(boardsResult)
+            .append(Component.text(" ", NamedTextColor.GRAY))
+            .append(viceResult)
+            .build();
+    }
+
+    Component seedViceSites() {
+        final World world = plugin.getServer().getWorlds().isEmpty() ? null : plugin.getServer().getWorlds().getFirst();
+        if (world == null) {
+            return Component.text("No world available for vice-site seeding.", NamedTextColor.RED);
+        }
+
+        final Location spawn = world.getSpawnLocation();
+        final List<WorldContentLibrary.ViceVariant> variants = WorldContentLibrary.viceVariants();
+        int seeded = 0;
+        for (int index = 0; index < 4; index++) {
+            if (viceSites.size() > index) {
+                continue;
+            }
+            final WorldContentLibrary.ViceVariant variant = variants.get(index % variants.size());
+            final Location location = chooseViceLocation(spawn, index);
+            if (location == null) {
+                continue;
+            }
+            final String id = "vice_" + (index + 1);
+            seedViceSite(id, variant, location);
+            seeded++;
+        }
+        return Component.text(
+            "Seeded " + seeded + " vice site(s).",
+            seeded > 0 ? NamedTextColor.GREEN : NamedTextColor.YELLOW
+        );
+    }
+
+    List<RadarSignal> radarSignalsFor(final Player player, final int limit) {
+        final List<ViceSite> undiscoveredVice = viceSites.stream()
+            .filter(site -> site.location().getWorld() != null)
+            .filter(site -> site.location().getWorld().equals(player.getWorld()))
+            .filter(site -> !seedStateRepository.hasDiscoveredViceSite(player.getUniqueId(), site.id()))
+            .sorted(Comparator.comparingDouble(site -> site.location().distanceSquared(player.getLocation())))
+            .toList();
+
+        if (!undiscoveredVice.isEmpty()) {
+            return undiscoveredVice.stream()
+                .limit(limit)
+                .map(site -> toRadarSignal(player.getLocation(), site))
+                .toList();
+        }
+
+        return hideoutService.nearestSignalsFor(player, limit).stream()
+            .map(signal -> new RadarSignal(signal.hideout().id(), signal.hideout().name(), "hideout",
+                hideoutService.locationForId(signal.hideout().id()), signal.distanceSquared(), signal.cardinal(),
+                signal.hideout().clue()))
+            .toList();
+    }
+
+    Component radarSummaryFor(final Player player) {
+        final List<RadarSignal> signals = radarSignalsFor(player, 3);
+        if (signals.isEmpty()) {
+            return Component.text("The Brothel Radar hisses, but finds no Baron-network signals.", NamedTextColor.GRAY);
+        }
+        Component line = Component.text("Brothel Radar picks up: ", NamedTextColor.AQUA);
+        for (int index = 0; index < signals.size(); index++) {
+            final RadarSignal signal = signals.get(index);
+            if (index > 0) {
+                line = line.append(Component.text(" | ", NamedTextColor.DARK_GRAY));
+            }
+            line = line.append(Component.text(
+                signal.name() + " " + signal.cardinal() + " " + Math.round(Math.sqrt(signal.distanceSquared())) + "m",
+                NamedTextColor.WHITE
+            ));
+        }
+        return line;
+    }
+
+    Location nextRadarTarget(final Player player) {
+        final List<RadarSignal> signals = radarSignalsFor(player, 1);
+        return signals.isEmpty() ? null : signals.getFirst().location();
+    }
+
+    Component pingAndDiscover(final Player player, final double radius) {
+        final ViceSite discovered = nearestUndiscoveredViceWithin(player, radius);
+        if (discovered != null) {
+            seedStateRepository.markViceSiteDiscovered(player.getUniqueId(), discovered.id());
+            plugin.debugLog("Player " + player.getName() + " discovered vice site " + discovered.id());
+            return Component.text(discovered.name() + ": ", NamedTextColor.LIGHT_PURPLE)
+                .append(Component.text(discovered.clue(), NamedTextColor.WHITE))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(discovered.nextLead(), NamedTextColor.YELLOW));
+        }
+        return hideoutService.nearbyHideoutIntelFor(player, radius);
+    }
+
+    private ViceSite nearestUndiscoveredViceWithin(final Player player, final double radius) {
+        return viceSites.stream()
+            .filter(site -> site.location().getWorld() != null)
+            .filter(site -> site.location().getWorld().equals(player.getWorld()))
+            .filter(site -> !seedStateRepository.hasDiscoveredViceSite(player.getUniqueId(), site.id()))
+            .filter(site -> site.location().distanceSquared(player.getLocation()) <= radius * radius)
+            .min(Comparator.comparingDouble(site -> site.location().distanceSquared(player.getLocation())))
+            .orElse(null);
+    }
+
     private void seedAntenna(final Location location) {
         final World world = location.getWorld();
         if (world == null) {
@@ -123,6 +312,16 @@ final class WorldSeedService {
                 }
             }
         }
+
+        for (int y = 1; y <= 2; y++) {
+            painter.set(world.getBlockAt(baseX + 4, baseY + y, baseZ + 10), Material.AIR);
+        }
+        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 9), Material.DARK_OAK_TRAPDOOR);
+        painter.set(world.getBlockAt(baseX + 4, baseY, baseZ + 11), Material.DARK_OAK_STAIRS);
+        painter.set(world.getBlockAt(baseX + 4, baseY - 1, baseZ + 12), Material.COBBLESTONE_STAIRS);
+        painter.set(world.getBlockAt(baseX + 3, baseY, baseZ + 11), Material.SCAFFOLDING);
+        painter.set(world.getBlockAt(baseX + 5, baseY, baseZ + 11), Material.SCAFFOLDING);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 2, baseZ + 10), Material.LANTERN);
 
         for (int x = 0; x < 9; x++) {
             for (int z = 0; z < 11; z++) {
@@ -171,7 +370,7 @@ final class WorldSeedService {
         painter.set(world.getBlockAt(baseX + 5, baseY + 1, baseZ + 1), Material.COAL_BLOCK);
         painter.set(world.getBlockAt(baseX + 6, baseY + 1, baseZ + 9), Material.BARREL);
         painter.set(world.getBlockAt(baseX + 1, baseY + 1, baseZ + 9), Material.RED_BED);
-        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 9), Material.DARK_OAK_STAIRS);
+        painter.set(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 9), Material.DARK_OAK_STAIRS);
         painter.set(world.getBlockAt(baseX + 4, baseY + 2, baseZ + 9), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 10), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 8, baseY + 1, baseZ + 5), Material.LANTERN);
@@ -201,6 +400,132 @@ final class WorldSeedService {
             }
         }
         return null;
+    }
+
+    private void restoreViceSites() {
+        viceSites.clear();
+        for (final Map<String, Object> map : seedStateRepository.viceSiteMaps()) {
+            final World world = plugin.getServer().getWorld((String) map.get("world"));
+            if (world == null) {
+                continue;
+            }
+            viceSites.add(new ViceSite(
+                (String) map.get("id"),
+                (String) map.get("name"),
+                new Location(world, (int) map.get("x"), (int) map.get("y"), (int) map.get("z")),
+                (String) map.get("variant"),
+                (String) map.get("clue"),
+                (String) map.get("nextLead")
+            ));
+        }
+    }
+
+    private Location chooseViceLocation(final Location spawn, final int index) {
+        final World world = spawn.getWorld();
+        if (world == null) {
+            return null;
+        }
+        final double[] angles = {30.0D, 120.0D, 220.0D, 310.0D};
+        final double distance = 120.0D + index * 45.0D;
+        final double radians = Math.toRadians(angles[index % angles.length]);
+        final int x = (int) Math.round(spawn.getX() + Math.cos(radians) * distance);
+        final int z = (int) Math.round(spawn.getZ() + Math.sin(radians) * distance);
+        final int y = world.getHighestBlockYAt(x, z);
+        return new Location(world, x, y + 1, z);
+    }
+
+    private void seedViceSite(final String id, final WorldContentLibrary.ViceVariant variant, final Location location) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return;
+        }
+        final int baseX = location.getBlockX() - 3;
+        final int baseZ = location.getBlockZ() - 3;
+        final int baseY = location.getBlockY();
+
+        painter.fill(world.getBlockAt(baseX, baseY, baseZ), 7, 7, Material.DARK_OAK_PLANKS);
+        for (int x = 0; x < 7; x++) {
+            for (int z = 0; z < 7; z++) {
+                final boolean edge = x == 0 || x == 6 || z == 0 || z == 6;
+                if (!edge) continue;
+                for (int y = 1; y <= 3; y++) {
+                    painter.set(world.getBlockAt(baseX + x, baseY + y, baseZ + z),
+                        (x == 0 || x == 6) && (z == 0 || z == 6) ? Material.STRIPPED_CHERRY_LOG : Material.CHERRY_PLANKS);
+                }
+            }
+        }
+        for (int y = 1; y <= 2; y++) {
+            painter.set(world.getBlockAt(baseX + 3, baseY + y, baseZ), Material.AIR);
+        }
+        for (int x = 0; x < 7; x++) {
+            for (int z = 0; z < 7; z++) {
+                painter.set(world.getBlockAt(baseX + x, baseY + 4, baseZ + z), Material.DARK_OAK_SLAB);
+            }
+        }
+        painter.set(world.getBlockAt(baseX + 1, baseY + 1, baseZ + 1), Material.BARREL);
+        placeBarrel(world.getBlockAt(baseX + 1, baseY + 1, baseZ + 1), variant.name() + " Ledger", List.of(
+            WorldContentLibrary.sponsorDraftPaper(),
+            WorldContentLibrary.listenerNumbersPaper(),
+            new ItemStack(Material.EMERALD, ThreadLocalRandom.current().nextInt(4, 11)),
+            new ItemStack(Material.GOLD_NUGGET, ThreadLocalRandom.current().nextInt(10, 21)),
+            new ItemStack(Material.GLASS_BOTTLE, 3)
+        ));
+        placeChest(world.getBlockAt(baseX + 5, baseY + 1, baseZ + 1), variant.name() + " Back Room", List.of(
+            WorldContentLibrary.repaymentCertificate(),
+            new ItemStack(Material.DIAMOND, ThreadLocalRandom.current().nextInt(1, 4)),
+            new ItemStack(Material.GUNPOWDER, ThreadLocalRandom.current().nextInt(4, 10)),
+            new ItemStack(Material.POTION, 2)
+        ));
+        placeLectern(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 4), WorldContentLibrary.softwareBook());
+        painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 4), Material.JUKEBOX);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 4), Material.LANTERN);
+        painter.set(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 6), Material.DARK_OAK_STAIRS);
+        painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 6), Material.RED_CARPET);
+        painter.set(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 5), Material.RED_CARPET);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 6), Material.RED_CARPET);
+
+        spawnViceStaff(location, variant);
+        final ViceSite viceSite = new ViceSite(id, variant.name(), location.clone(), variant.id(), variant.clue(), variant.nextLead());
+        viceSites.add(viceSite);
+        seedStateRepository.saveViceSite(id, variant.name(), location, variant.id(), variant.clue(), variant.nextLead());
+        plugin.debugLog("Seeded vice site " + id + " at " + format(location));
+    }
+
+    private void spawnViceStaff(final Location location, final WorldContentLibrary.ViceVariant variant) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return;
+        }
+        int offset = 0;
+        for (final String npcName : variant.npcNames()) {
+            final Location npcLocation = location.clone().add((offset % 2) - 0.5D, 0, (offset / 2) - 0.5D);
+            offset++;
+            world.spawn(npcLocation, Villager.class, villager -> {
+                villager.customName(Component.text(npcName, NamedTextColor.LIGHT_PURPLE));
+                villager.setCustomNameVisible(true);
+                villager.setPersistent(true);
+                villager.setRemoveWhenFarAway(false);
+                villager.setVillagerExperience(0);
+                villager.setCanPickupItems(false);
+                villager.setProfession(Villager.Profession.NONE);
+                villager.setAdult();
+            });
+        }
+    }
+
+    private RadarSignal toRadarSignal(final Location playerLocation, final ViceSite site) {
+        final double dx = site.location().getX() - playerLocation.getX();
+        final double dz = site.location().getZ() - playerLocation.getZ();
+        final double distanceSquared = dx * dx + dz * dz;
+        return new RadarSignal(site.id(), site.name(), "vice", site.location(), distanceSquared, cardinal(dx, dz), site.clue());
+    }
+
+    private String cardinal(final double dx, final double dz) {
+        final double angle = Math.toDegrees(Math.atan2(-dx, dz));
+        final double normalized = (angle + 360.0D) % 360.0D;
+        final String[] directions = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+        final int index = (int) Math.round(normalized / 45.0D) % directions.length;
+        return directions[index];
     }
 
     private boolean isBoardSiteUsable(final Location location) {
@@ -354,5 +679,11 @@ final class WorldSeedService {
     private String format(final Location location) {
         return (location.getWorld() == null ? "world" : location.getWorld().getName()) + " "
             + location.getBlockX() + " " + location.getBlockY() + " " + location.getBlockZ();
+    }
+
+    record ViceSite(String id, String name, Location location, String variant, String clue, String nextLead) {
+    }
+
+    record RadarSignal(String id, String name, String type, Location location, double distanceSquared, String cardinal, String clue) {
     }
 }

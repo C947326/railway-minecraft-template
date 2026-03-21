@@ -87,6 +87,15 @@ final class FugitiveBaronController {
         return getBaronEntity() != null;
     }
 
+    BaronState state() {
+        return state;
+    }
+
+    Location getBaronLocation() {
+        final LivingEntity baron = getBaronEntity();
+        return baron == null ? null : baron.getLocation().clone();
+    }
+
     LivingEntity spawnBaron(final Location location) {
         Objects.requireNonNull(location.getWorld(), "Spawn world cannot be null.");
         despawnBaron();
@@ -276,15 +285,6 @@ final class FugitiveBaronController {
         setState(BaronState.FLEE, attacker, currentTick);
         dialogueService.forceLine(attacker, BaronState.FLEE, currentTick);
         flee(baron, attacker, attackedFleeSpeed);
-    }
-
-    BaronState state() {
-        return state;
-    }
-
-    Location getBaronLocation() {
-        final LivingEntity baron = getBaronEntity();
-        return baron == null ? null : baron.getLocation().clone();
     }
 
     private EntityType parseEntityType() {

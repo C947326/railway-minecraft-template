@@ -21,15 +21,17 @@ import org.bukkit.util.Vector;
 final class DragonRadarService {
     private final FugitiveBaronPlugin plugin;
     private final HideoutService hideoutService;
+    private final WorldSeedService worldSeedService;
     private long updateTicks;
     private double maxDriftDegrees;
     private double pingRadius;
     private String radarName;
     private List<String> radarLore;
 
-    DragonRadarService(final FugitiveBaronPlugin plugin, final HideoutService hideoutService) {
+    DragonRadarService(final FugitiveBaronPlugin plugin, final HideoutService hideoutService, final WorldSeedService worldSeedService) {
         this.plugin = plugin;
         this.hideoutService = hideoutService;
+        this.worldSeedService = worldSeedService;
         reload(plugin.getConfig());
     }
 
@@ -82,8 +84,8 @@ final class DragonRadarService {
     }
 
     void pingNearestSignals(final Player player) {
-        player.sendActionBar(hideoutService.radarSummaryFor(player));
-        final Component clue = hideoutService.nearbyHideoutIntelFor(player, pingRadius);
+        player.sendActionBar(worldSeedService.radarSummaryFor(player));
+        final Component clue = worldSeedService.pingAndDiscover(player, pingRadius);
         if (clue != null) {
             player.sendMessage(clue);
         }
@@ -101,10 +103,8 @@ final class DragonRadarService {
     }
 
     private void updatePlayerRadar(final Player player) {
-        final List<HideoutService.HideoutSignal> signals = hideoutService.nearestSignalsFor(player, 1);
-        final Location signalTarget = signals.isEmpty()
-            ? null
-            : withDrift(player.getLocation(), signals.getFirst().hideout().toLocation(plugin));
+        final Location target = worldSeedService.nextRadarTarget(player);
+        final Location signalTarget = target == null ? null : withDrift(player.getLocation(), target);
 
         final PlayerInventory inventory = player.getInventory();
         updateRadarStack(inventory.getItemInMainHand(), signalTarget);

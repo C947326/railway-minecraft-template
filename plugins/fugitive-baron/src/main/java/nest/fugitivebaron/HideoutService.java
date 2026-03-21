@@ -3,7 +3,9 @@ package nest.fugitivebaron;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
@@ -18,6 +20,7 @@ final class HideoutService {
 
     private final FugitiveBaronPlugin plugin;
     private List<Hideout> hideouts = List.of();
+    private final Map<String, Location> locationOverrides = new HashMap<>();
     private int activeHideoutIndex;
 
     HideoutService(final FugitiveBaronPlugin plugin) {
@@ -95,7 +98,7 @@ final class HideoutService {
 
     Location activeHideoutLocation() {
         final Hideout active = activeHideout();
-        return active == null ? null : active.toLocation(plugin);
+        return active == null ? null : locationFor(active);
     }
 
     String activeHideoutId() {
@@ -208,8 +211,24 @@ final class HideoutService {
         return hideout == null ? null : hideout.ambientSoundId();
     }
 
+    void setLocationOverride(final String hideoutId, final Location location) {
+        if (hideoutId == null || location == null) {
+            return;
+        }
+        locationOverrides.put(hideoutId, location.clone());
+    }
+
+    Location locationForId(final String hideoutId) {
+        return hideouts.stream()
+            .filter(hideout -> hideout.id().equalsIgnoreCase(hideoutId))
+            .findFirst()
+            .map(this::locationFor)
+            .map(Location::clone)
+            .orElse(null);
+    }
+
     private HideoutSignal toSignal(final Location playerLocation, final Hideout hideout) {
-        final Location hideoutLocation = hideout.toLocation(plugin);
+        final Location hideoutLocation = locationFor(hideout);
         if (hideoutLocation == null || playerLocation.getWorld() == null || !playerLocation.getWorld().equals(hideoutLocation.getWorld())) {
             return null;
         }
@@ -226,6 +245,14 @@ final class HideoutService {
         final String[] directions = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
         final int index = (int) Math.round(normalized / 45.0D) % directions.length;
         return directions[index];
+    }
+
+    private Location locationFor(final Hideout hideout) {
+        final Location override = locationOverrides.get(hideout.id());
+        if (override != null) {
+            return override.clone();
+        }
+        return hideout.toLocation(plugin);
     }
 
     record HideoutSignal(Hideout hideout, double distanceSquared, String cardinal) {

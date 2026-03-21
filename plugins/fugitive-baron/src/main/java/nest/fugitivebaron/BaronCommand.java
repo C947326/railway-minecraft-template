@@ -118,14 +118,24 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 if ("antenna".equalsIgnoreCase(args[1])) {
-                    sender.sendMessage(worldSeedService.seedAntennaNest());
+                    final boolean spawnBaron = args.length >= 3 && "spawn".equalsIgnoreCase(args[2]);
+                    sender.sendMessage(worldSeedService.seedAntennaNest(spawnBaron));
                     return true;
                 }
                 if ("boards".equalsIgnoreCase(args[1])) {
                     sender.sendMessage(worldSeedService.seedBoards());
                     return true;
                 }
-                sender.sendMessage(Component.text("Usage: /fugitivebaron seed <status|antenna|boards>", NamedTextColor.RED));
+                if ("vice".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(worldSeedService.seedViceSites());
+                    return true;
+                }
+                if ("all".equalsIgnoreCase(args[1])) {
+                    final boolean spawnBaron = args.length >= 3 && "spawn".equalsIgnoreCase(args[2]);
+                    sender.sendMessage(worldSeedService.seedAll(spawnBaron));
+                    return true;
+                }
+                sender.sendMessage(Component.text("Usage: /fugitivebaron seed <status|antenna [spawn]|boards|vice|all [spawn]>", NamedTextColor.RED));
                 return true;
             }
             default -> {
@@ -150,7 +160,12 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
             return java.util.stream.Stream.concat(options.stream(), java.util.stream.Stream.of("random")).toList();
         }
         if (args.length == 2 && "seed".equalsIgnoreCase(args[0])) {
-            return List.of("status", "antenna", "boards");
+            return List.of("status", "antenna", "boards", "vice", "all");
+        }
+        if (args.length == 3
+            && "seed".equalsIgnoreCase(args[0])
+            && ("antenna".equalsIgnoreCase(args[1]) || "all".equalsIgnoreCase(args[1]))) {
+            return List.of("spawn");
         }
         return List.of();
     }

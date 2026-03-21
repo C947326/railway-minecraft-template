@@ -36,8 +36,8 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         this.dialogueService = new DialogueService(this, getConfig());
         this.hideoutService = new HideoutService(this);
         this.controller = new FugitiveBaronController(this, hideoutService, itemChecker, dialogueService);
-        this.radarService = new DragonRadarService(this, hideoutService);
-        this.worldSeedService = new WorldSeedService(this, hideoutService);
+        this.worldSeedService = new WorldSeedService(this, hideoutService, controller);
+        this.radarService = new DragonRadarService(this, hideoutService, worldSeedService);
         this.debugLogging = getConfig().getBoolean("encounter.debug-logging", false);
 
         getServer().getPluginManager().registerEvents(new BaronListener(this, controller, radarService), this);
