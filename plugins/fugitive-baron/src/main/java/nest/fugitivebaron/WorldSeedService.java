@@ -29,6 +29,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.potion.PotionType;
 
 final class WorldSeedService {
@@ -564,7 +565,10 @@ final class WorldSeedService {
         placeBarrel(world.getBlockAt(baseX + 7, baseY, baseZ + 8), "Concealed Stash", List.of(
             new ItemStack(Material.COMPASS, 1),
             new ItemStack(Material.SPYGLASS, 1),
-            namedItem(Material.TURTLE_HELMET, "Surveillance Helmet"),
+            enchantedHelmet("Surveillance Helmet"),
+            enchantedHelmet("Surveillance Helmet"),
+            enchantedBoots("Escape Boots"),
+            enchantedBoots("Escape Boots"),
             new ItemStack(Material.GUNPOWDER, 16),
             WorldContentLibrary.escapeNotePaper(),
             new ItemStack(Material.IRON_INGOT, 2)
@@ -1088,6 +1092,24 @@ final class WorldSeedService {
             meta.displayName(Component.text(name));
             item.setItemMeta(meta);
         }
+        return item;
+    }
+
+    private ItemStack enchantedHelmet(final String name) {
+        final ItemStack item = namedItem(Material.TURTLE_HELMET, name);
+        item.addUnsafeEnchantment(Enchantment.AQUA_AFFINITY, 1);
+        item.addUnsafeEnchantment(Enchantment.RESPIRATION, 3);
+        item.addUnsafeEnchantment(Enchantment.UNBREAKING, 3);
+        return item;
+    }
+
+    private ItemStack enchantedBoots(final String name) {
+        final ItemStack item = namedItem(Material.NETHERITE_BOOTS, name);
+        item.addUnsafeEnchantment(Enchantment.DEPTH_STRIDER, 3);
+        item.addUnsafeEnchantment(Enchantment.FEATHER_FALLING, 4);
+        item.addUnsafeEnchantment(Enchantment.SOUL_SPEED, 3);
+        item.addUnsafeEnchantment(Enchantment.UNBREAKING, 3);
+        item.addUnsafeEnchantment(Enchantment.MENDING, 1);
         return item;
     }
 
