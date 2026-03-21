@@ -27,6 +27,7 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.enchantments.Enchantment;
@@ -647,8 +648,7 @@ final class WorldSeedService {
         final double radians = Math.toRadians(angles[index % angles.length]);
         final int x = (int) Math.round(spawn.getX() + Math.cos(radians) * distance);
         final int z = (int) Math.round(spawn.getZ() + Math.sin(radians) * distance);
-        final int y = world.getHighestBlockYAt(x, z);
-        return new Location(world, x, y + 1, z);
+        return findViceSiteLocation(new Location(world, x, world.getHighestBlockYAt(x, z) + 1, z));
     }
 
     private void seedViceSite(final String id, final WorldContentLibrary.ViceVariant variant, final Location location) {
@@ -661,6 +661,8 @@ final class WorldSeedService {
         final int baseX = location.getBlockX() - 3;
         final int baseZ = location.getBlockZ() - 3;
         final int baseY = location.getBlockY();
+
+        prepareViceSiteFootprint(world, baseX, baseY, baseZ);
 
         painter.fill(world.getBlockAt(baseX, baseY, baseZ), 7, 7, Material.DARK_OAK_PLANKS);
         for (int x = 0; x < 7; x++) {
@@ -750,6 +752,65 @@ final class WorldSeedService {
         }
     }
 
+    private Location findViceSiteLocation(final Location preferredCenter) {
+        final World world = preferredCenter.getWorld();
+        if (world == null) {
+            return preferredCenter;
+        }
+
+        Location best = null;
+        double bestVariance = Double.MAX_VALUE;
+        for (int radius = 0; radius <= 12; radius += 2) {
+            for (int dx = -radius; dx <= radius; dx += 2) {
+                for (int dz = -radius; dz <= radius; dz += 2) {
+                    final int x = preferredCenter.getBlockX() + dx;
+                    final int z = preferredCenter.getBlockZ() + dz;
+                    final SiteFit fit = viceSiteFit(world, x, z);
+                    if (!fit.usable()) {
+                        continue;
+                    }
+                    if (fit.variance() < bestVariance) {
+                        bestVariance = fit.variance();
+                        best = new Location(world, x, fit.floorY() + 1, z);
+                    }
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        }
+        return preferredCenter;
+    }
+
+    private SiteFit viceSiteFit(final World world, final int centerX, final int centerZ) {
+        int minY = Integer.MAX_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (int dx = -4; dx <= 4; dx++) {
+            for (int dz = -4; dz <= 4; dz++) {
+                final int x = centerX + dx;
+                final int z = centerZ + dz;
+                final int y = world.getHighestBlockYAt(x, z);
+                final Material top = world.getBlockAt(x, y - 1, z).getType();
+                if (!top.isSolid() || top == Material.WATER || top == Material.LAVA) {
+                    return new SiteFit(false, y, Double.MAX_VALUE);
+                }
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+            }
+        }
+        return new SiteFit(maxY - minY <= 2, maxY, maxY - minY);
+    }
+
+    private void prepareViceSiteFootprint(final World world, final int baseX, final int baseY, final int baseZ) {
+        for (int x = -1; x <= 7; x++) {
+            for (int z = -1; z <= 7; z++) {
+                for (int y = 1; y <= 5; y++) {
+                    painter.set(world.getBlockAt(baseX + x, baseY + y, baseZ + z), Material.AIR);
+                }
+            }
+        }
+    }
+
     private void spawnViceStaff(final Location location, final WorldContentLibrary.ViceVariant variant) {
         final World world = location.getWorld();
         if (world == null) {
@@ -765,7 +826,7 @@ final class WorldSeedService {
         int index = 0;
         for (final String npcName : variant.npcNames()) {
             final double[] pad = pads[index % pads.length];
-            final Location npcLocation = location.clone().add(pad[0], pad[1], pad[2]);
+            final Location npcLocation = safeViceStaffLocation(location.clone().add(pad[0], pad[1], pad[2]));
             final String quip = variant.npcQuips().get(index % variant.npcQuips().size());
             final String skinName = variant.npcSkinNames().get(index % variant.npcSkinNames().size());
             final int styleIndex = index;
@@ -800,6 +861,35 @@ final class WorldSeedService {
                 display.addScoreboardTag(VICE_QUIP_TAG);
             });
         }
+    }
+
+    private Location safeViceStaffLocation(final Location preferred) {
+        final World world = preferred.getWorld();
+        if (world == null) {
+            return preferred;
+        }
+        final Location candidate = preferred.clone();
+        candidate.setY(Math.floor(candidate.getY()) + 0.05D);
+        for (int dy = 0; dy <= 2; dy++) {
+            final Location shifted = candidate.clone().add(0.0D, dy, 0.0D);
+            if (isClearForViceStaff(shifted)) {
+                return shifted;
+            }
+        }
+        return candidate;
+    }
+
+    private boolean isClearForViceStaff(final Location location) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return false;
+        }
+        final Block feet = world.getBlockAt(location);
+        final Block head = feet.getRelative(0, 1, 0);
+        final Block ground = feet.getRelative(0, -1, 0);
+        return (feet.getType().isAir() || feet.isPassable())
+            && (head.getType().isAir() || head.isPassable())
+            && ground.getType().isSolid();
     }
 
     private void maybeMoveViceStaff(final org.bukkit.entity.LivingEntity entity, final ViceSite site, final long currentTick) {
@@ -1022,17 +1112,26 @@ final class WorldSeedService {
         block.setType(Material.LECTERN, false);
         fillLectern(block, book);
         plugin.getServer().getScheduler().runTask(plugin, () -> fillLectern(block, book));
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> fillLectern(block, book), 2L);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> fillLectern(block, book), 10L);
     }
 
     private void fillLectern(final Block block, final ItemStack book) {
         if (block.getState() instanceof Lectern lectern) {
             lectern.update(true, true);
             if (block.getState() instanceof Lectern placedLectern) {
-                placedLectern.getInventory().setItem(0, book.clone());
+                placedLectern.getInventory().setBook(book.clone());
                 placedLectern.update(true, true);
-                plugin.debugLog("Filled lectern with '" + (book.getItemMeta() != null ? book.getItemMeta().getDisplayName() : book.getType()) + "' at " + format(block.getLocation()));
+                plugin.debugLog("Filled lectern with '" + bookLabel(book) + "' at " + format(block.getLocation()));
             }
         }
+    }
+
+    private String bookLabel(final ItemStack book) {
+        if (book.getItemMeta() instanceof BookMeta meta) {
+            return meta.getTitle() == null || meta.getTitle().isBlank() ? book.getType().name() : meta.getTitle();
+        }
+        return book.getType().name();
     }
 
     private void placeBarrel(final Block block, final String name, final List<ItemStack> items) {
@@ -1160,5 +1259,8 @@ final class WorldSeedService {
     }
 
     record RadarSignal(String id, String name, String type, Location location, double distanceSquared, String cardinal, String clue) {
+    }
+
+    record SiteFit(boolean usable, int floorY, double variance) {
     }
 }
