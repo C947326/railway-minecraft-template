@@ -3,11 +3,10 @@ package nest.fugitivebaron;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.key.Key;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.SoundCategory;
 
 final class DialogueService {
     private static final String SPEAKER = "Baron";
@@ -96,7 +95,7 @@ final class DialogueService {
         if (!playVoiceAudio || soundId == null || soundId.isBlank()) {
             return;
         }
-        player.playSound(Sound.sound(Key.key(soundId), Sound.Source.VOICE, voiceVolume, voicePitch));
+        player.playSound(player.getLocation(), soundId, SoundCategory.MASTER, voiceVolume, voicePitch);
         plugin.debugLog("Played sound " + soundId + " for " + player.getName());
     }
 }

@@ -7,7 +7,7 @@ author: Codex
 commands:
   fugitivebaron:
     description: Spawn or remove the fugitive baron NPC.
-    usage: /fugitivebaron <spawn|despawn|item|radar|hideout|reload>
+    usage: /fugitivebaron <spawn|despawn|item|radar|hideout|seed|reload>
     permission: fugitivebaron.admin
 permissions:
   fugitivebaron.admin:

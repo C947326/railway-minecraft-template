@@ -16,6 +16,8 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.WanderingTrader;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
@@ -94,6 +96,8 @@ final class FugitiveBaronController {
         livingEntity.setCanPickupItems(false);
         livingEntity.setCollidable(true);
         livingEntity.setAI(true);
+        livingEntity.setSilent(true);
+        tuneAttributes(livingEntity);
         applyAppearance(livingEntity);
 
         if (livingEntity instanceof WanderingTrader trader) {
@@ -324,7 +328,7 @@ final class FugitiveBaronController {
         }
 
         if (baron instanceof Mob mob) {
-            final Location destination = baron.getLocation().clone().add(away.normalize().multiply(8.0D));
+            final Location destination = baron.getLocation().clone().add(away.normalize().multiply(14.0D));
             destination.setY(baron.getLocation().getY());
             tryMove(mob, destination, speed);
         }
@@ -369,6 +373,20 @@ final class FugitiveBaronController {
         meta.setColor(color);
         item.setItemMeta(meta);
         return item;
+    }
+
+    private void tuneAttributes(final LivingEntity baron) {
+        setBaseValue(baron, Attribute.MAX_HEALTH, 40.0D);
+        setBaseValue(baron, Attribute.MOVEMENT_SPEED, 0.42D);
+        baron.setHealth(baron.getAttribute(Attribute.MAX_HEALTH) == null ? baron.getHealth() : baron.getAttribute(Attribute.MAX_HEALTH).getValue());
+    }
+
+    private void setBaseValue(final LivingEntity entity, final Attribute attribute, final double value) {
+        final AttributeInstance instance = entity.getAttribute(attribute);
+        if (instance == null) {
+            return;
+        }
+        instance.setBaseValue(value);
     }
 
     private Vector escapeVector(final LivingEntity baron, final Player player) {

@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -47,6 +48,17 @@ final class BaronListener implements Listener {
         if (attacker != null) {
             controller.handleDamage(event.getEntity(), attacker, plugin.currentTick());
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    void onEnvironmentalDamage(final EntityDamageEvent event) {
+        if (!controller.isBaron(event.getEntity())) {
+            return;
+        }
+        if (event instanceof EntityDamageByEntityEvent) {
+            return;
+        }
+        event.setCancelled(true);
     }
 
     @EventHandler

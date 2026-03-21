@@ -5,8 +5,8 @@ encounter:
   display-name: "John"
   flee-reset-radius: 16.0
   observe-speed: 0.08
-  suspicious-speed: 0.14
-  flee-speed: 0.34
+  suspicious-speed: 0.24
+  flee-speed: 0.55
   line-cooldown-ticks: 80
   interact-cooldown-ticks: 40
   subtitle-mode: "both"

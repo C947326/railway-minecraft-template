@@ -18,15 +18,18 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
     private final FugitiveBaronPlugin plugin;
     private final FugitiveBaronController controller;
     private final HideoutService hideoutService;
+    private final WorldSeedService worldSeedService;
 
     BaronCommand(
         final FugitiveBaronPlugin plugin,
         final FugitiveBaronController controller,
-        final HideoutService hideoutService
+        final HideoutService hideoutService,
+        final WorldSeedService worldSeedService
     ) {
         this.plugin = plugin;
         this.controller = controller;
         this.hideoutService = hideoutService;
+        this.worldSeedService = worldSeedService;
     }
 
     @Override
@@ -37,7 +40,7 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
         @NotNull final String[] args
     ) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /fugitivebaron <spawn|despawn|item|radar|hideout|reload>", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /fugitivebaron <spawn|despawn|item|radar|hideout|seed|reload>", NamedTextColor.RED));
             return true;
         }
 
@@ -109,6 +112,22 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Component.text("Fugitive Baron config reloaded.", NamedTextColor.GREEN));
                 return true;
             }
+            case "seed" -> {
+                if (args.length == 1 || "status".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(worldSeedService.seedStatus());
+                    return true;
+                }
+                if ("antenna".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(worldSeedService.seedAntennaNest());
+                    return true;
+                }
+                if ("boards".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(worldSeedService.seedBoards());
+                    return true;
+                }
+                sender.sendMessage(Component.text("Usage: /fugitivebaron seed <status|antenna|boards>", NamedTextColor.RED));
+                return true;
+            }
             default -> {
                 sender.sendMessage(Component.text("Unknown subcommand.", NamedTextColor.RED));
                 return true;
@@ -124,11 +143,14 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
         @NotNull final String[] args
     ) {
         if (args.length == 1) {
-            return List.of("spawn", "despawn", "item", "radar", "hideout", "reload");
+            return List.of("spawn", "despawn", "item", "radar", "hideout", "seed", "reload");
         }
         if (args.length == 2 && "hideout".equalsIgnoreCase(args[0])) {
             final List<String> options = hideoutService.hideouts().stream().map(Hideout::id).toList();
             return java.util.stream.Stream.concat(options.stream(), java.util.stream.Stream.of("random")).toList();
+        }
+        if (args.length == 2 && "seed".equalsIgnoreCase(args[0])) {
+            return List.of("status", "antenna", "boards");
         }
         return List.of();
     }

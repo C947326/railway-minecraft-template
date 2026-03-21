@@ -16,6 +16,7 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
     private HideoutService hideoutService;
     private FugitiveBaronController controller;
     private DragonRadarService radarService;
+    private WorldSeedService worldSeedService;
     private NamespacedKey baronKey;
     private NamespacedKey powderKey;
     private NamespacedKey radarKey;
@@ -36,12 +37,13 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         this.hideoutService = new HideoutService(this);
         this.controller = new FugitiveBaronController(this, hideoutService, itemChecker, dialogueService);
         this.radarService = new DragonRadarService(this, hideoutService);
+        this.worldSeedService = new WorldSeedService(this, hideoutService);
         this.debugLogging = getConfig().getBoolean("encounter.debug-logging", false);
 
         getServer().getPluginManager().registerEvents(new BaronListener(this, controller, radarService), this);
 
         final PluginCommand command = Objects.requireNonNull(getCommand("fugitivebaron"), "Command fugitivebaron missing from plugin.yml");
-        final BaronCommand executor = new BaronCommand(this, controller, hideoutService);
+        final BaronCommand executor = new BaronCommand(this, controller, hideoutService, worldSeedService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
 
