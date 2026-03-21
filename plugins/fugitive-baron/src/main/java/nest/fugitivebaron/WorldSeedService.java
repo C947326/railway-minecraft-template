@@ -1,6 +1,7 @@
 package nest.fugitivebaron;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
@@ -149,14 +150,7 @@ final class WorldSeedService {
             new ItemStack(Material.ROTTEN_FLESH, 2)
         ));
 
-        placeChest(world.getBlockAt(baseX + 6, baseY + 1, baseZ + 6), "Techtonic Crate", List.of(
-            WorldContentLibrary.repaymentCertificate(),
-            WorldContentLibrary.sponsorDraftPaper(),
-            WorldContentLibrary.listenerNumbersPaper(),
-            new ItemStack(Material.MUSIC_DISC_CAT, 1),
-            new ItemStack(Material.GLASS_BOTTLE, 2),
-            new ItemStack(Material.MAP, 1)
-        ));
+        placeChest(world.getBlockAt(baseX + 6, baseY + 1, baseZ + 6), "Techtonic Crate", createTechtonicCrateLoot());
 
         placeBarrel(world.getBlockAt(baseX + 7, baseY + 1, baseZ + 3), "Liquor Shelf", List.of(
             WorldContentLibrary.liquorBook(),
@@ -317,6 +311,44 @@ final class WorldSeedService {
             inventory.addItem(item.clone());
         }
         container.update(true, false);
+    }
+
+    private List<ItemStack> createTechtonicCrateLoot() {
+        final ThreadLocalRandom random = ThreadLocalRandom.current();
+        final java.util.ArrayList<ItemStack> loot = new java.util.ArrayList<>();
+
+        loot.add(WorldContentLibrary.repaymentCertificate());
+        loot.add(WorldContentLibrary.sponsorDraftPaper());
+        loot.add(WorldContentLibrary.listenerNumbersPaper());
+        loot.add(new ItemStack(Material.MAP, 1));
+        loot.add(new ItemStack(Material.GLASS_BOTTLE, 4));
+        loot.add(new ItemStack(Material.MUSIC_DISC_CAT, 1));
+        loot.add(new ItemStack(Material.MUSIC_DISC_PIGSTEP, 1));
+
+        loot.add(new ItemStack(Material.EMERALD, random.nextInt(12, 25)));
+        loot.add(new ItemStack(Material.GOLD_INGOT, random.nextInt(20, 37)));
+        loot.add(new ItemStack(Material.DIAMOND, random.nextInt(6, 13)));
+
+        if (random.nextDouble() < 0.75D) {
+            loot.add(new ItemStack(Material.DIAMOND, random.nextInt(4, 9)));
+        }
+        if (random.nextDouble() < 0.55D) {
+            loot.add(new ItemStack(Material.ENCHANTED_GOLDEN_APPLE, 1));
+        }
+        if (random.nextDouble() < 0.45D) {
+            loot.add(new ItemStack(Material.NETHERITE_SCRAP, random.nextInt(1, 3)));
+        }
+        if (random.nextDouble() < 0.20D) {
+            loot.add(new ItemStack(Material.NETHERITE_INGOT, 1));
+        }
+        if (random.nextDouble() < 0.40D) {
+            loot.add(new ItemStack(Material.ANCIENT_DEBRIS, random.nextInt(1, 3)));
+        }
+        if (random.nextDouble() < 0.50D) {
+            loot.add(new ItemStack(Material.GUNPOWDER, random.nextInt(8, 17)));
+        }
+
+        return loot;
     }
 
     private String format(final Location location) {

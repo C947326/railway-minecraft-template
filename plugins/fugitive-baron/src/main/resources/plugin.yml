@@ -4,6 +4,7 @@ main: nest.fugitivebaron.FugitiveBaronPlugin
 api-version: "1.21"
 description: A paranoid fugitive tech baron encounter for Paper servers.
 author: Codex
+softdepend: [Citizens]
 commands:
   fugitivebaron:
     description: Spawn or remove the fugitive baron NPC.

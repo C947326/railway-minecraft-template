@@ -41,6 +41,11 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         this.debugLogging = getConfig().getBoolean("encounter.debug-logging", false);
 
         getServer().getPluginManager().registerEvents(new BaronListener(this, controller, radarService), this);
+        if (getServer().getPluginManager().getPlugin("Citizens") != null) {
+            getServer().getPluginManager().registerEvents(new CitizensBaronListener(this, controller), this);
+        } else if (getConfig().getBoolean("encounter.prefer-citizens-player-npc", true)) {
+            getLogger().warning("Citizens is not installed; falling back to the non-player John body.");
+        }
 
         final PluginCommand command = Objects.requireNonNull(getCommand("fugitivebaron"), "Command fugitivebaron missing from plugin.yml");
         final BaronCommand executor = new BaronCommand(this, controller, hideoutService, worldSeedService);

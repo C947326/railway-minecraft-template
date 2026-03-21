@@ -32,6 +32,7 @@ final class FugitiveBaronController {
     private final HideoutService hideoutService;
     private final RecognitionItemChecker itemChecker;
     private final DialogueService dialogueService;
+    private CitizensBaronSupport citizensSupport;
 
     private double awarenessRadius;
     private double suspicionRadius;
@@ -39,13 +40,16 @@ final class FugitiveBaronController {
     private double fleeResetRadius;
     private double suspiciousSpeed;
     private double fleeSpeed;
+    private double attackedFleeSpeed;
     private long interactCooldownTicks;
+    private long attackedFleeTicks;
     private String displayName;
 
     private UUID baronId;
     private BaronState state = BaronState.IDLE;
     private UUID currentTargetId;
     private long lastInteractionTick;
+    private long fleeUntilTick;
 
     FugitiveBaronController(
         final FugitiveBaronPlugin plugin,
@@ -57,6 +61,9 @@ final class FugitiveBaronController {
         this.hideoutService = hideoutService;
         this.itemChecker = itemChecker;
         this.dialogueService = dialogueService;
+        if (plugin.getServer().getPluginManager().getPlugin("Citizens") != null) {
+            this.citizensSupport = new CitizensBaronSupport(plugin);
+        }
         reload(plugin.getConfig());
     }
 
@@ -67,8 +74,13 @@ final class FugitiveBaronController {
         this.fleeResetRadius = config.getDouble("encounter.flee-reset-radius", 16.0D);
         this.suspiciousSpeed = config.getDouble("encounter.suspicious-speed", 0.14D);
         this.fleeSpeed = config.getDouble("encounter.flee-speed", 0.34D);
+        this.attackedFleeSpeed = config.getDouble("encounter.attacked-flee-speed", Math.max(fleeSpeed, 0.8D));
         this.interactCooldownTicks = config.getLong("encounter.interact-cooldown-ticks", 40L);
+        this.attackedFleeTicks = config.getLong("encounter.attacked-flee-ticks", 200L);
         this.displayName = config.getString("encounter.display-name", "John");
+        if (citizensSupport != null) {
+            citizensSupport.reload(config);
+        }
     }
 
     boolean hasBaron() {
@@ -78,6 +90,17 @@ final class FugitiveBaronController {
     LivingEntity spawnBaron(final Location location) {
         Objects.requireNonNull(location.getWorld(), "Spawn world cannot be null.");
         despawnBaron();
+
+        if (citizensSupport != null && citizensSupport.isPreferredAndAvailable()) {
+            final LivingEntity citizensBaron = citizensSupport.spawnBaron(location, displayName);
+            this.baronId = citizensBaron.getUniqueId();
+            this.state = BaronState.IDLE;
+            this.currentTargetId = null;
+            this.lastInteractionTick = 0L;
+            this.fleeUntilTick = 0L;
+            plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(location));
+            return citizensBaron;
+        }
 
         final EntityType type = parseEntityType();
         final Entity entity = location.getWorld().spawnEntity(location, type);
@@ -110,6 +133,7 @@ final class FugitiveBaronController {
         this.state = BaronState.IDLE;
         this.currentTargetId = null;
         this.lastInteractionTick = 0L;
+        this.fleeUntilTick = 0L;
         plugin.debugLog("Spawned Baron at " + formatLocation(location));
 
         return livingEntity;
@@ -127,11 +151,16 @@ final class FugitiveBaronController {
         final LivingEntity baron = getBaronEntity();
         if (baron != null) {
             plugin.debugLog("Despawning Baron at " + formatLocation(baron.getLocation()));
-            baron.remove();
+            if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+                citizensSupport.despawnBaron();
+            } else {
+                baron.remove();
+            }
         }
         this.baronId = null;
         this.currentTargetId = null;
         this.state = BaronState.IDLE;
+        this.fleeUntilTick = 0L;
     }
 
     void tick(final long currentTick) {
@@ -140,13 +169,25 @@ final class FugitiveBaronController {
             this.baronId = null;
             this.currentTargetId = null;
             this.state = BaronState.IDLE;
+            this.fleeUntilTick = 0L;
+            return;
+        }
+
+        final Player forcedFleeTarget = fleeingAggressor(baron.getWorld(), currentTick);
+        if (forcedFleeTarget != null) {
+            currentTargetId = forcedFleeTarget.getUniqueId();
+            setState(BaronState.FLEE, forcedFleeTarget, currentTick);
+            flee(baron, forcedFleeTarget, attackedFleeSpeed);
             return;
         }
 
         final Player target = findNearestPlayer(baron.getLocation(), awarenessRadius);
         if (target == null) {
             setState(BaronState.IDLE, null, currentTick);
-            if (baron instanceof Mob mob) {
+            if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+                citizensSupport.stopNavigation();
+                zeroHorizontalVelocity(baron);
+            } else if (baron instanceof Mob mob) {
                 mob.setTarget(null);
                 stopPathfinding(mob);
                 mob.setVelocity(new Vector(0, baron.getVelocity().getY(), 0));
@@ -230,14 +271,11 @@ final class FugitiveBaronController {
         }
 
         plugin.debugLog("Baron damaged by " + attacker.getName() + "; triggering escape.");
-        setState(BaronState.ESCAPE, attacker, currentTick);
-        dialogueService.forceLine(attacker, BaronState.ESCAPE, currentTick);
-        final World world = baron.getWorld();
-        world.spawnParticle(Particle.SMOKE, baron.getLocation().add(0, 1, 0), 24, 0.4, 0.6, 0.4, 0.01);
-        baron.remove();
-        this.baronId = null;
-        this.currentTargetId = null;
-        this.state = BaronState.IDLE;
+        this.currentTargetId = attacker.getUniqueId();
+        this.fleeUntilTick = currentTick + attackedFleeTicks;
+        setState(BaronState.FLEE, attacker, currentTick);
+        dialogueService.forceLine(attacker, BaronState.FLEE, currentTick);
+        flee(baron, attacker, attackedFleeSpeed);
     }
 
     BaronState state() {
@@ -260,6 +298,12 @@ final class FugitiveBaronController {
     }
 
     private LivingEntity getBaronEntity() {
+        if (citizensSupport != null) {
+            final LivingEntity citizensBaron = citizensSupport.getBaronEntity();
+            if (citizensBaron != null) {
+                return citizensBaron;
+            }
+        }
         if (baronId == null) {
             return null;
         }
@@ -308,6 +352,10 @@ final class FugitiveBaronController {
     }
 
     private void face(final LivingEntity baron, final Location targetLocation) {
+        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+            citizensSupport.face(targetLocation);
+            return;
+        }
         final Location current = baron.getLocation();
         final Vector direction = targetLocation.toVector().subtract(current.toVector());
         direction.setY(0);
@@ -327,12 +375,17 @@ final class FugitiveBaronController {
             return;
         }
 
-        if (baron instanceof Mob mob) {
-            final Location destination = baron.getLocation().clone().add(away.normalize().multiply(14.0D));
+        final Location destination = baron.getLocation().clone().add(away.normalize().multiply(14.0D));
+        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+            citizensSupport.navigateTo(destination, speedModifier(speed));
+        } else if (baron instanceof Mob mob) {
             destination.setY(baron.getLocation().getY());
             tryMove(mob, destination, speed);
         }
 
+        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+            return;
+        }
         final Vector movement = away.normalize().multiply(speed);
         movement.setY(baron.getVelocity().getY());
         baron.setVelocity(movement);
@@ -344,6 +397,9 @@ final class FugitiveBaronController {
     }
 
     private void zeroHorizontalVelocity(final LivingEntity baron) {
+        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+            citizensSupport.stopNavigation();
+        }
         final Vector velocity = baron.getVelocity();
         baron.setVelocity(new Vector(0, velocity.getY(), 0));
     }
@@ -413,5 +469,20 @@ final class FugitiveBaronController {
         } catch (final NoSuchMethodError ignored) {
             plugin.debugLog("Pathfinder.stopPathfinding unavailable; falling back to velocity only.");
         }
+    }
+
+    private float speedModifier(final double speed) {
+        return (float) Math.max(1.0D, speed * 4.0D);
+    }
+
+    private Player fleeingAggressor(final World world, final long currentTick) {
+        if (currentTargetId == null || currentTick > fleeUntilTick) {
+            return null;
+        }
+        final Player player = plugin.getServer().getPlayer(currentTargetId);
+        if (player == null || !player.isOnline() || player.isDead() || player.getWorld() != world) {
+            return null;
+        }
+        return player;
     }
 }
