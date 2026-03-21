@@ -1,0 +1,158 @@
+{
+  "observe": [
+    {
+      "id": "observe_01",
+      "text": "Interesting. You are looking, but not pretending not to."
+    },
+    {
+      "id": "observe_02",
+      "text": "You have the expression of a man about to ask questions he cannot afford."
+    },
+    {
+      "id": "observe_03",
+      "text": "No one arrives here by accident. Not twice."
+    },
+    {
+      "id": "observe_04",
+      "text": "You look too sober to be harmless."
+    },
+    {
+      "id": "observe_05",
+      "text": "Either you are lost, or someone paid you to look this stupid."
+    },
+    {
+      "id": "observe_06",
+      "text": "If you came to discuss Techtonic finances, you should have brought a stronger drink."
+    }
+  ],
+  "suspicious": [
+    {
+      "id": "suspicious_01",
+      "text": "Too calm. That is always the first mistake."
+    },
+    {
+      "id": "suspicious_02",
+      "text": "Too tidy. Too calm. That is the posture of an informant."
+    },
+    {
+      "id": "suspicious_03",
+      "text": "I know an information predator when I see one."
+    },
+    {
+      "id": "suspicious_04",
+      "text": "Do not drift closer like some well-mannered assassin."
+    },
+    {
+      "id": "suspicious_05",
+      "text": "Back away unless you brought powder and excellent intentions."
+    },
+    {
+      "id": "suspicious_06",
+      "text": "Nobody approaches me that gently unless they are carrying a knife or a question."
+    },
+    {
+      "id": "suspicious_07",
+      "text": "I have survived friendlier faces and more ambitious creditors than you."
+    },
+    {
+      "id": "suspicious_08",
+      "text": "Every man with a badge believes subtlety is part of the uniform."
+    }
+  ],
+  "trust": [
+    {
+      "id": "trust_01",
+      "text": "Ah. Now that is a civilized amount of degeneracy."
+    },
+    {
+      "id": "trust_02",
+      "text": "Good. You are not a narc, merely a bad influence."
+    },
+    {
+      "id": "trust_03",
+      "text": "Techtonic was never robbed. It was aggressively restructured."
+    },
+    {
+      "id": "trust_04",
+      "text": "Very well. We may trade in facts."
+    },
+    {
+      "id": "trust_05",
+      "text": "Your money did not vanish. It evolved into mobility."
+    },
+    {
+      "id": "trust_06",
+      "text": "You want repayment. I can offer perspective, memorabilia, and possibly a crate."
+    }
+  ],
+  "panic": [
+    {
+      "id": "panic_01",
+      "text": "Nope. Fuck that. Too close."
+    },
+    {
+      "id": "panic_02",
+      "text": "No. Absolutely not. You have crossed from curious into intolerable."
+    },
+    {
+      "id": "panic_03",
+      "text": "Distance keeps everyone honest and me alive."
+    },
+    {
+      "id": "panic_04",
+      "text": "Do not lunge at me unless you want this meeting to become unnecessarily athletic."
+    },
+    {
+      "id": "panic_05",
+      "text": "Compromised. Entirely and spectacularly compromised."
+    },
+    {
+      "id": "panic_06",
+      "text": "Run first, explain later."
+    }
+  ],
+  "escape": [
+    {
+      "id": "escape_01",
+      "text": "You have ruined a perfectly good conspiracy."
+    },
+    {
+      "id": "escape_02",
+      "text": "Congratulations. You turned a good hideout into a crime scene."
+    },
+    {
+      "id": "escape_03",
+      "text": "The money is gone, the books are fictional, and I am relocating."
+    }
+  ],
+  "hideout": [
+    {
+      "id": "hideout_antenna_nest",
+      "text": "If you cannot hear the noise in the sky, you are not sick enough yet."
+    },
+    {
+      "id": "hideout_beach_cache",
+      "text": "Beaches are for exits, cocktails, and regrettable decisions."
+    },
+    {
+      "id": "hideout_cave_server_room",
+      "text": "Trust no machine you did not personally offend, especially if it contains your missing podcast money."
+    },
+    {
+      "id": "hideout_jungle_bunker",
+      "text": "The jungle forgives nothing, especially confidence and investor optimism."
+    },
+    {
+      "id": "hideout_ruined_dock",
+      "text": "Docks are where smugglers, romantics, and failed investors learn arithmetic."
+    },
+    {
+      "id": "hideout_swamp_shack",
+      "text": "The swamp does not lie. People do. Balance sheets do it professionally."
+    },
+    {
+      "id": "hideout_watchpoint",
+      "text": "Height is not safety, but it does improve the paranoia and the bookkeeping."
+    }
+  ]
+}

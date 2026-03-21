@@ -1,0 +1,182 @@
+{
+  "baron.observe.observe_01": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_01"
+    ]
+  },
+  "baron.observe.observe_02": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_02"
+    ]
+  },
+  "baron.observe.observe_03": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_03"
+    ]
+  },
+  "baron.observe.observe_04": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_04"
+    ]
+  },
+  "baron.observe.observe_05": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_05"
+    ]
+  },
+  "baron.observe.observe_06": {
+    "sounds": [
+      "fugitivebaron:voice/observe/observe_06"
+    ]
+  },
+  "baron.suspicious.suspicious_01": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_01"
+    ]
+  },
+  "baron.suspicious.suspicious_02": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_02"
+    ]
+  },
+  "baron.suspicious.suspicious_03": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_03"
+    ]
+  },
+  "baron.suspicious.suspicious_04": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_04"
+    ]
+  },
+  "baron.suspicious.suspicious_05": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_05"
+    ]
+  },
+  "baron.suspicious.suspicious_06": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_06"
+    ]
+  },
+  "baron.suspicious.suspicious_07": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_07"
+    ]
+  },
+  "baron.suspicious.suspicious_08": {
+    "sounds": [
+      "fugitivebaron:voice/suspicious/suspicious_08"
+    ]
+  },
+  "baron.trust.trust_01": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_01"
+    ]
+  },
+  "baron.trust.trust_02": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_02"
+    ]
+  },
+  "baron.trust.trust_03": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_03"
+    ]
+  },
+  "baron.trust.trust_04": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_04"
+    ]
+  },
+  "baron.trust.trust_05": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_05"
+    ]
+  },
+  "baron.trust.trust_06": {
+    "sounds": [
+      "fugitivebaron:voice/trust/trust_06"
+    ]
+  },
+  "baron.panic.panic_01": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_01"
+    ]
+  },
+  "baron.panic.panic_02": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_02"
+    ]
+  },
+  "baron.panic.panic_03": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_03"
+    ]
+  },
+  "baron.panic.panic_04": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_04"
+    ]
+  },
+  "baron.panic.panic_05": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_05"
+    ]
+  },
+  "baron.panic.panic_06": {
+    "sounds": [
+      "fugitivebaron:voice/panic/panic_06"
+    ]
+  },
+  "baron.escape.escape_01": {
+    "sounds": [
+      "fugitivebaron:voice/escape/escape_01"
+    ]
+  },
+  "baron.escape.escape_02": {
+    "sounds": [
+      "fugitivebaron:voice/escape/escape_02"
+    ]
+  },
+  "baron.escape.escape_03": {
+    "sounds": [
+      "fugitivebaron:voice/escape/escape_03"
+    ]
+  },
+  "baron.hideout.hideout_antenna_nest": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_antenna_nest"
+    ]
+  },
+  "baron.hideout.hideout_beach_cache": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_beach_cache"
+    ]
+  },
+  "baron.hideout.hideout_cave_server_room": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_cave_server_room"
+    ]
+  },
+  "baron.hideout.hideout_jungle_bunker": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_jungle_bunker"
+    ]
+  },
+  "baron.hideout.hideout_ruined_dock": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_ruined_dock"
+    ]
+  },
+  "baron.hideout.hideout_swamp_shack": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_swamp_shack"
+    ]
+  },
+  "baron.hideout.hideout_watchpoint": {
+    "sounds": [
+      "fugitivebaron:voice/hideout/hideout_watchpoint"
+    ]
+  }
+}

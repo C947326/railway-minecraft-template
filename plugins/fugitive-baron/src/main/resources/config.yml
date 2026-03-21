@@ -1,0 +1,111 @@
+encounter:
+  awareness-radius: 12.0
+  suspicion-radius: 7.0
+  trust-radius: 3.0
+  flee-reset-radius: 16.0
+  observe-speed: 0.08
+  suspicious-speed: 0.14
+  flee-speed: 0.34
+  line-cooldown-ticks: 80
+  interact-cooldown-ticks: 40
+  subtitle-mode: "both"
+  play-voice-audio: true
+  voice-volume: 1.0
+  voice-pitch: 1.0
+  debug-logging: true
+  require-named-powder: false
+  powder-name: "Suspicious White Powder"
+  active-hideout-index: 0
+  radar-name: "Brothel Radar"
+  radar-lore:
+    - "Seven hideouts. One fugitive."
+    - "It finds hideouts, vice, and regrettable investments."
+  radar-update-ticks: 60
+  radar-max-drift-degrees: 18.0
+  radar-ping-radius: 40.0
+  spawn-entity: "WANDERING_TRADER"
+hideouts:
+  antenna_nest:
+    enabled: true
+    name: "Antenna Nest"
+    world: "world"
+    x: 128.0
+    y: 76.0
+    z: -212.0
+    mood: "absurd technical ritual"
+    clue: "Fresh copper polish and humming redstone say someone was here recently."
+    ambient-line: "If you cannot hear the noise in the sky, you are not sick enough yet."
+    trust-intel: "The Baron taps the chair and murmurs: \"Watch the antennae. The strongest signal is never the safest.\""
+    ambient-sound-id: "baron.hideout.hideout_antenna_nest"
+  beach_cache:
+    enabled: false
+    name: "Beach Cache"
+    world: "world"
+    x: -340.0
+    y: 64.0
+    z: 418.0
+    mood: "temporary luxury in collapse"
+    clue: "A burned note reads: 'dock compromised. move inland before dusk.'"
+    ambient-line: "Coastlines are for exits, not holidays."
+    trust-intel: "The Baron glances toward the tide: \"When the beach goes quiet, the jungle is next.\""
+    ambient-sound-id: "baron.hideout.hideout_beach_cache"
+  cave_server_room:
+    enabled: false
+    name: "Cave Server Room"
+    world: "world"
+    x: 512.0
+    y: 42.0
+    z: 96.0
+    mood: "hidden infrastructure"
+    clue: "A lectern page says: 'root access revoked after the lantern failure.'"
+    ambient-line: "Trust no machine you did not personally offend."
+    trust-intel: "The Baron lowers his voice: \"The cave keeps records. Records are both useful and unforgivable.\""
+    ambient-sound-id: "baron.hideout.hideout_cave_server_room"
+  jungle_bunker:
+    enabled: false
+    name: "Jungle Bunker"
+    world: "world"
+    x: -128.0
+    y: 70.0
+    z: -544.0
+    mood: "camouflage and tropical delusion"
+    clue: "A torn map has one hideout crossed out in charcoal and another circled twice."
+    ambient-line: "Jungles reward preparation and punish confidence."
+    trust-intel: "The Baron smirks: \"People hide badly in jungles. They imagine leaves are encryption.\""
+    ambient-sound-id: "baron.hideout.hideout_jungle_bunker"
+  ruined_dock:
+    enabled: false
+    name: "Ruined Dock"
+    world: "world"
+    x: 284.0
+    y: 63.0
+    z: 621.0
+    mood: "hurried departure"
+    clue: "A waterlogged ledger shows one shipment never left the pier."
+    ambient-line: "Ports are merely queues with seagulls."
+    trust-intel: "The Baron flicks water off a crate: \"The dock tells you who lied to leave first.\""
+    ambient-sound-id: "baron.hideout.hideout_ruined_dock"
+  swamp_shack:
+    enabled: false
+    name: "Swamp Shack"
+    world: "world"
+    x: -612.0
+    y: 63.0
+    z: -88.0
+    mood: "humid paranoia"
+    clue: "Muddy boot tracks head north, and the lamp oil is still warm."
+    ambient-line: "The swamp is honest. Everything announces its intentions."
+    trust-intel: "The Baron nods toward the reeds: \"The swamp remembers footsteps longer than people do.\""
+    ambient-sound-id: "baron.hideout.hideout_swamp_shack"
+  watchpoint:
+    enabled: false
+    name: "Savanna Watchpoint"
+    world: "world"
+    x: 703.0
+    y: 88.0
+    z: -301.0
+    mood: "surveillance mania"
+    clue: "A spyglass stand faces three trails, each marked with a scratched warning rune."
+    ambient-line: "Height is not safety, but it improves the argument."
+    trust-intel: "The Baron adjusts the spyglass: \"From height, everyone confesses with their route choice.\""
+    ambient-sound-id: "baron.hideout.hideout_watchpoint"

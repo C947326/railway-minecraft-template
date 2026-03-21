@@ -65,6 +65,24 @@ control UI in the same container. This is required to write to the console
 pipe directly. See the itzg docs for console pipe behavior and other
 command options: https://docker-minecraft-server.readthedocs.io/en/latest/sending-commands/commands/
 
+### Bundled plugin pipeline
+
+This image now also builds the Paper plugin in
+[plugins/fugitive-baron](/Users/dao/Software/Crorgans%20Nest/plugins/fugitive-baron)
+during the Docker build using a Gradle JDK 21 stage.
+
+On container startup, [docker/start.sh](/Users/dao/Software/Crorgans%20Nest/docker/start.sh)
+copies any bundled plugin jars from `/app/plugins-bundled` into `/data/plugins`
+before the dashboard starts. Because the Minecraft server itself is launched
+later via `/start`, the plugin is already in the correct place by the time
+Paper boots.
+
+This makes Railway deploys deterministic:
+
+- Railway builds the plugin jar as part of the image
+- the container syncs bundled jars into the persistent plugins directory on boot
+- pressing `Power on` starts Minecraft with the latest bundled plugin already installed
+
 ## Notes
 
 - The Bun dashboard stays online while Minecraft is off. `Power off` now means

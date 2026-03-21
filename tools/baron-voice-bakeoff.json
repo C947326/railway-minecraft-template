@@ -1,0 +1,18 @@
+[
+  {
+    "id": "observe_sample",
+    "text": "Interesting. You are looking, but not pretending not to."
+  },
+  {
+    "id": "suspicious_sample",
+    "text": "Too calm. That is always the first mistake."
+  },
+  {
+    "id": "trust_sample",
+    "text": "Very well. We may trade in facts."
+  },
+  {
+    "id": "panic_sample",
+    "text": "Distance is the foundation of trust."
+  }
+]
