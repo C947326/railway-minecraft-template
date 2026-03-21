@@ -13,7 +13,6 @@ import org.bukkit.World;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
-import org.bukkit.block.Container;
 import org.bukkit.block.Lectern;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Directional;
@@ -610,32 +609,37 @@ final class WorldSeedService {
         block.setType(Material.LECTERN, false);
         if (block.getState() instanceof Lectern lectern) {
             lectern.getInventory().setItem(0, book);
-            lectern.update(true, false);
+            lectern.update(true, true);
         }
     }
 
     private void placeBarrel(final Block block, final String name, final List<ItemStack> items) {
         block.setType(Material.BARREL, false);
         if (block.getState() instanceof Barrel barrel) {
-            populateContainer(barrel, name, items);
+            barrel.setCustomName(name);
+            barrel.update(true, true);
+            if (block.getState() instanceof Barrel placedBarrel) {
+                populateInventory(placedBarrel.getInventory(), items);
+            }
         }
     }
 
     private void placeChest(final Block block, final String name, final List<ItemStack> items) {
         block.setType(Material.CHEST, false);
         if (block.getState() instanceof Chest chest) {
-            populateContainer(chest, name, items);
+            chest.setCustomName(name);
+            chest.update(true, true);
+            if (block.getState() instanceof Chest placedChest) {
+                populateInventory(placedChest.getBlockInventory(), items);
+            }
         }
     }
 
-    private void populateContainer(final Container container, final String name, final List<ItemStack> items) {
-        container.setCustomName(name);
-        final Inventory inventory = container.getInventory();
+    private void populateInventory(final Inventory inventory, final List<ItemStack> items) {
         inventory.clear();
         for (final ItemStack item : items) {
             inventory.addItem(item.clone());
         }
-        container.update(true, false);
     }
 
     private List<ItemStack> createTechtonicCrateLoot() {
