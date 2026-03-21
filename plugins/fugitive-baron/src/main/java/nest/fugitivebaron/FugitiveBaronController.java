@@ -33,6 +33,7 @@ final class FugitiveBaronController {
     private final RecognitionItemChecker itemChecker;
     private final DialogueService dialogueService;
     private CitizensBaronSupport citizensSupport;
+    private boolean citizensUnavailable;
 
     private double awarenessRadius;
     private double suspicionRadius;
@@ -62,7 +63,11 @@ final class FugitiveBaronController {
         this.itemChecker = itemChecker;
         this.dialogueService = dialogueService;
         if (plugin.getServer().getPluginManager().getPlugin("Citizens") != null) {
-            this.citizensSupport = new CitizensBaronSupport(plugin);
+            try {
+                this.citizensSupport = new CitizensBaronSupport(plugin);
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("initialization", throwable);
+            }
         }
         reload(plugin.getConfig());
     }
@@ -78,8 +83,12 @@ final class FugitiveBaronController {
         this.interactCooldownTicks = config.getLong("encounter.interact-cooldown-ticks", 40L);
         this.attackedFleeTicks = config.getLong("encounter.attacked-flee-ticks", 200L);
         this.displayName = config.getString("encounter.display-name", "John");
-        if (citizensSupport != null) {
-            citizensSupport.reload(config);
+        if (hasCitizensSupport()) {
+            try {
+                citizensSupport.reload(config);
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("reload", throwable);
+            }
         }
     }
 
@@ -100,15 +109,21 @@ final class FugitiveBaronController {
         Objects.requireNonNull(location.getWorld(), "Spawn world cannot be null.");
         despawnBaron();
 
-        if (citizensSupport != null && citizensSupport.isPreferredAndAvailable()) {
-            final LivingEntity citizensBaron = citizensSupport.spawnBaron(location, displayName);
-            this.baronId = citizensBaron.getUniqueId();
-            this.state = BaronState.IDLE;
-            this.currentTargetId = null;
-            this.lastInteractionTick = 0L;
-            this.fleeUntilTick = 0L;
-            plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(location));
-            return citizensBaron;
+        if (hasCitizensSupport()) {
+            try {
+                if (citizensSupport.isPreferredAndAvailable()) {
+                    final LivingEntity citizensBaron = citizensSupport.spawnBaron(location, displayName);
+                    this.baronId = citizensBaron.getUniqueId();
+                    this.state = BaronState.IDLE;
+                    this.currentTargetId = null;
+                    this.lastInteractionTick = 0L;
+                    this.fleeUntilTick = 0L;
+                    plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(location));
+                    return citizensBaron;
+                }
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("spawn", throwable);
+            }
         }
 
         final EntityType type = parseEntityType();
@@ -160,8 +175,13 @@ final class FugitiveBaronController {
         final LivingEntity baron = getBaronEntity();
         if (baron != null) {
             plugin.debugLog("Despawning Baron at " + formatLocation(baron.getLocation()));
-            if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
-                citizensSupport.despawnBaron();
+            if (isCitizensBaron(baron)) {
+                try {
+                    citizensSupport.despawnBaron();
+                } catch (final Throwable throwable) {
+                    disableCitizensIntegration("despawn", throwable);
+                    baron.remove();
+                }
             } else {
                 baron.remove();
             }
@@ -193,8 +213,12 @@ final class FugitiveBaronController {
         final Player target = findNearestPlayer(baron.getLocation(), awarenessRadius);
         if (target == null) {
             setState(BaronState.IDLE, null, currentTick);
-            if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
-                citizensSupport.stopNavigation();
+            if (isCitizensBaron(baron)) {
+                try {
+                    citizensSupport.stopNavigation();
+                } catch (final Throwable throwable) {
+                    disableCitizensIntegration("idle navigation", throwable);
+                }
                 zeroHorizontalVelocity(baron);
             } else if (baron instanceof Mob mob) {
                 mob.setTarget(null);
@@ -298,10 +322,14 @@ final class FugitiveBaronController {
     }
 
     private LivingEntity getBaronEntity() {
-        if (citizensSupport != null) {
-            final LivingEntity citizensBaron = citizensSupport.getBaronEntity();
-            if (citizensBaron != null) {
-                return citizensBaron;
+        if (hasCitizensSupport()) {
+            try {
+                final LivingEntity citizensBaron = citizensSupport.getBaronEntity();
+                if (citizensBaron != null) {
+                    return citizensBaron;
+                }
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("entity lookup", throwable);
             }
         }
         if (baronId == null) {
@@ -352,8 +380,12 @@ final class FugitiveBaronController {
     }
 
     private void face(final LivingEntity baron, final Location targetLocation) {
-        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
-            citizensSupport.face(targetLocation);
+        if (isCitizensBaron(baron)) {
+            try {
+                citizensSupport.face(targetLocation);
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("facing", throwable);
+            }
             return;
         }
         final Location current = baron.getLocation();
@@ -376,14 +408,18 @@ final class FugitiveBaronController {
         }
 
         final Location destination = baron.getLocation().clone().add(away.normalize().multiply(14.0D));
-        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
-            citizensSupport.navigateTo(destination, speedModifier(speed));
+        if (isCitizensBaron(baron)) {
+            try {
+                citizensSupport.navigateTo(destination, speedModifier(speed));
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("navigation", throwable);
+            }
         } else if (baron instanceof Mob mob) {
             destination.setY(baron.getLocation().getY());
             tryMove(mob, destination, speed);
         }
 
-        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
+        if (isCitizensBaron(baron)) {
             return;
         }
         final Vector movement = away.normalize().multiply(speed);
@@ -397,8 +433,12 @@ final class FugitiveBaronController {
     }
 
     private void zeroHorizontalVelocity(final LivingEntity baron) {
-        if (citizensSupport != null && citizensSupport.isBaronEntity(baron)) {
-            citizensSupport.stopNavigation();
+        if (isCitizensBaron(baron)) {
+            try {
+                citizensSupport.stopNavigation();
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("stop navigation", throwable);
+            }
         }
         final Vector velocity = baron.getVelocity();
         baron.setVelocity(new Vector(0, velocity.getY(), 0));
@@ -484,5 +524,33 @@ final class FugitiveBaronController {
             return null;
         }
         return player;
+    }
+
+    private boolean hasCitizensSupport() {
+        return !citizensUnavailable && citizensSupport != null;
+    }
+
+    private boolean isCitizensBaron(final LivingEntity entity) {
+        if (!hasCitizensSupport()) {
+            return false;
+        }
+        try {
+            return citizensSupport.isBaronEntity(entity);
+        } catch (final Throwable throwable) {
+            disableCitizensIntegration("entity identity", throwable);
+            return false;
+        }
+    }
+
+    private void disableCitizensIntegration(final String phase, final Throwable throwable) {
+        if (citizensUnavailable) {
+            return;
+        }
+        citizensUnavailable = true;
+        citizensSupport = null;
+        plugin.getLogger().warning(
+            "Disabling Citizens integration during " + phase + ": " +
+            throwable.getClass().getSimpleName() + " - " + throwable.getMessage()
+        );
     }
 }

@@ -1,7 +1,6 @@
 FROM oven/bun:latest AS builder
 
 WORKDIR /build
-ARG CITIZENS_VERSION=2.0.41-SNAPSHOT
 COPY package.json bun.lock ./
 RUN bun install
 
@@ -12,7 +11,7 @@ COPY bunfig.toml tsconfig.json postcss.config.cjs tailwind.config.ts components.
 
 RUN bunx tailwindcss -c tailwind.config.ts -i src/index.css -o src/tailwind.css --minify
 RUN bun run baron:pack-resource-pack
-RUN bun -e 'const version = process.env.CITIZENS_VERSION; const base = `https://maven.citizensnpcs.co/repo/net/citizensnpcs/citizens-main/${version}`; const metadata = await fetch(`${base}/maven-metadata.xml`).then(r => { if (!r.ok) throw new Error(`metadata ${r.status}`); return r.text(); }); const startTag = "<value>"; const endTag = "</value>"; const start = metadata.indexOf(startTag); const end = start === -1 ? -1 : metadata.indexOf(endTag, start + startTag.length); if (start === -1 || end === -1) throw new Error("missing snapshot value"); const value = metadata.slice(start + startTag.length, end).trim(); const jarName = `citizens-main-${value}.jar`; const jar = await fetch(`${base}/${jarName}`).then(r => { if (!r.ok) throw new Error(`jar ${r.status}`); return r.arrayBuffer(); }); await Bun.write("/build/Citizens.jar", jar);'
+RUN bun -e 'const apiUrl = "https://ci.citizensnpcs.co/job/Citizens2/lastSuccessfulBuild/api/json"; const build = await fetch(apiUrl).then(r => { if (!r.ok) throw new Error(`build api ${r.status}`); return r.json(); }); const artifact = (build.artifacts || []).find(a => typeof a.fileName === "string" && a.fileName.startsWith("Citizens-") && a.fileName.endsWith(".jar")); if (!artifact) throw new Error("missing Citizens artifact"); const jarUrl = `${build.url}artifact/${artifact.relativePath}`; const jar = await fetch(jarUrl).then(r => { if (!r.ok) throw new Error(`jar ${r.status}`); return r.arrayBuffer(); }); await Bun.write("/build/Citizens.jar", jar);'
 RUN bun build ./src/index.ts --compile --outfile=server
 
 FROM gradle:8.14.3-jdk21 AS plugin-builder
