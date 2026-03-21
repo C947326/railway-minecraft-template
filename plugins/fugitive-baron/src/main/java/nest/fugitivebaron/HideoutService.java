@@ -60,7 +60,7 @@ final class HideoutService {
                 child.getString("mood", "uneasy silence"),
                 child.getString("clue", "Something here feels recently abandoned."),
                 child.getString("ambient-line", "The air itself sounds suspicious."),
-                child.getString("trust-intel", "The Baron offers nothing but a thin smile."),
+                child.getString("trust-intel", "John offers nothing but a thin smile."),
                 child.getString("ambient-sound-id", "baron.hideout." + key)
             ));
         }
@@ -206,7 +206,7 @@ final class HideoutService {
 
     String activeHideoutTrustIntel() {
         final Hideout hideout = activeHideout();
-        return hideout == null ? "The Baron offers nothing but a thin smile." : hideout.trustIntel();
+        return hideout == null ? "John offers nothing but a thin smile." : hideout.trustIntel();
     }
 
     String activeHideoutAmbientLine() {

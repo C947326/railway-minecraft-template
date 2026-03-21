@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.SoundCategory;
 
 final class DialogueService {
-    private static final String SPEAKER = "Baron";
+    private static final String SPEAKER = "John";
     private final FugitiveBaronPlugin plugin;
 
     private long lineCooldownTicks;

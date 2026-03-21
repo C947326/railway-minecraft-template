@@ -20,6 +20,8 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.persistence.PersistentDataType;
+import java.util.HashSet;
+import java.util.Set;
 
 final class CitizensBaronSupport {
     private final FugitiveBaronPlugin plugin;
@@ -91,6 +93,33 @@ final class CitizensBaronSupport {
         }
         npc.destroy();
         this.npcId = null;
+    }
+
+    int sweepSpawnedBarons() {
+        final NPCRegistry registry = registry();
+        if (registry == null) {
+            return 0;
+        }
+        final Set<Integer> removedIds = new HashSet<>();
+        for (final NPC npc : registry) {
+            if (!npc.isSpawned() || npc.getEntity() == null) {
+                continue;
+            }
+            if (!(npc.getEntity() instanceof LivingEntity livingEntity)) {
+                continue;
+            }
+            final boolean tagged = livingEntity.getPersistentDataContainer().has(plugin.baronKey(), PersistentDataType.BYTE);
+            final boolean namedJohn = npc.getName() != null && npc.getName().equalsIgnoreCase("John");
+            if (!tagged && !namedJohn) {
+                continue;
+            }
+            removedIds.add(npc.getId());
+            npc.destroy();
+        }
+        if (npcId != null && removedIds.contains(npcId)) {
+            npcId = null;
+        }
+        return removedIds.size();
     }
 
     LivingEntity getBaronEntity() {

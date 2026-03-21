@@ -18,6 +18,7 @@ import org.bukkit.block.Sign;
 import org.bukkit.block.data.Directional;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -27,6 +28,8 @@ import org.bukkit.potion.PotionType;
 
 final class WorldSeedService {
     private static final int DEFAULT_MAX_HUNT_CYCLES = 3;
+    private static final String VICE_STAFF_TAG = "vice_staff";
+    private static final String VICE_QUIP_TAG = "vice_quip";
 
     private final FugitiveBaronPlugin plugin;
     private final HideoutService hideoutService;
@@ -52,6 +55,7 @@ final class WorldSeedService {
     }
 
     Component seedStatus() {
+        final int johnCount = controller.knownBaronCount();
         final boolean baronSpawned = controller.hasBaron();
         final Location baronLocation = controller.getBaronLocation();
         final String baronStatus = baronSpawned
@@ -66,6 +70,8 @@ final class WorldSeedService {
                 + seedStateRepository.viceSiteCount()
                 + " cycle="
                 + seedStateRepository.huntCycle()
+                + " johns="
+                + johnCount
                 + " baron="
                 + baronStatus
                 + " version="
@@ -642,6 +648,15 @@ final class WorldSeedService {
             }
             villager.remove();
         }
+        for (final TextDisplay display : world.getEntitiesByClass(TextDisplay.class)) {
+            if (display.getLocation().distanceSquared(location) > 64.0D) {
+                continue;
+            }
+            if (!display.getScoreboardTags().contains(VICE_QUIP_TAG)) {
+                continue;
+            }
+            display.remove();
+        }
     }
 
     private void spawnViceStaff(final Location location, final WorldContentLibrary.ViceVariant variant) {
@@ -660,6 +675,7 @@ final class WorldSeedService {
         for (final String npcName : variant.npcNames()) {
             final double[] pad = pads[index % pads.length];
             final Location npcLocation = location.clone().add(pad[0], pad[1], pad[2]);
+            final String quip = variant.npcQuips().get(index % variant.npcQuips().size());
             index++;
             world.spawn(npcLocation, Villager.class, villager -> {
                 villager.customName(Component.text(npcName, NamedTextColor.LIGHT_PURPLE));
@@ -673,6 +689,18 @@ final class WorldSeedService {
                 villager.setAI(false);
                 villager.setInvulnerable(true);
                 villager.setCollidable(false);
+                villager.setSilent(true);
+                villager.addScoreboardTag(VICE_STAFF_TAG);
+            });
+            world.spawn(npcLocation.clone().add(0.0D, 2.35D, 0.0D), TextDisplay.class, display -> {
+                display.text(Component.text('"' + quip + '"', NamedTextColor.WHITE));
+                display.setPersistent(true);
+                display.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
+                display.setSeeThrough(true);
+                display.setShadowed(false);
+                display.setDefaultBackground(false);
+                display.setLineWidth(220);
+                display.addScoreboardTag(VICE_QUIP_TAG);
             });
         }
     }

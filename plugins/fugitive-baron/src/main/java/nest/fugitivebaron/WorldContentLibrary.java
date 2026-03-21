@@ -60,14 +60,28 @@ final class WorldContentLibrary {
                 "Velvet Lantern",
                 "He rented the upstairs room, insulted the weather, and kept asking which ridge had the cleanest view of the sky.",
                 "The girls say he left with copper, maps, and panic. The next whisper points outward toward the hills.",
-                List.of("Madam Sable", "Escort Inez", "Dancer Mirelle", "Escort Celeste", "Bartender June")
+                List.of("Madam Sable", "Escort Inez", "Dancer Mirelle", "Escort Celeste", "Bartender June"),
+                List.of(
+                    "John's a lovely bloke. Strange as mercury, but soft-hearted after midnight.",
+                    "Odd little man. Tips like a king, sleeps like a hunted rat.",
+                    "He talks like a lunatic, but he once paid off a girl's family debt in one sitting.",
+                    "I don't trust the shifty cunt, but I've seen worse men with cleaner shoes.",
+                    "He says terrifying things about infrastructure, then asks if everyone's eating properly."
+                )
             ),
             new ViceVariant(
                 "dockside_parlour",
                 "Dockside Parlour",
                 "He bought the house a round, paid in emeralds, and asked whether anyone here knew the road away from creditors and church bells.",
                 "A bookkeeper heard him muttering about the ridge antenna and the need to get above the town lights.",
-                List.of("Madam Pearl", "Dancer Ada", "Escort Ruth", "Bartender Sybil", "Bouncer Brigid")
+                List.of("Madam Pearl", "Dancer Ada", "Escort Ruth", "Bartender Sybil", "Bouncer Brigid"),
+                List.of(
+                    "John's a decent soul buried under whisky, paranoia, and very expensive mistakes.",
+                    "He smiles like a gentleman and vanishes like a pickpocket.",
+                    "Good heart, rotten instincts. A classic dockside tragedy.",
+                    "He bought the room a round and called it community reinvestment.",
+                    "If he says he's gone straight, count your silver and lock the back door."
+                )
             )
         );
     }
@@ -151,7 +165,7 @@ final class WorldContentLibrary {
     private static ItemStack writtenBook(final String title, final List<String> pages) {
         final ItemStack item = new ItemStack(Material.WRITTEN_BOOK);
         final BookMeta meta = (BookMeta) item.getItemMeta();
-        meta.setAuthor("The Baron");
+        meta.setAuthor("John");
         meta.setTitle(title);
         final List<Component> pageComponents = new ArrayList<>();
         for (final String page : pages) {
@@ -165,6 +179,6 @@ final class WorldContentLibrary {
     record BoardVariant(String name, String header, String sighting, String warning, String comic, String witness) {
     }
 
-    record ViceVariant(String id, String name, String clue, String nextLead, List<String> npcNames) {
+    record ViceVariant(String id, String name, String clue, String nextLead, List<String> npcNames, List<String> npcQuips) {
     }
 }

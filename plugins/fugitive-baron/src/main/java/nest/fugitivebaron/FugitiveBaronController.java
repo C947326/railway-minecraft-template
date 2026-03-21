@@ -105,9 +105,13 @@ final class FugitiveBaronController {
         return baron == null ? null : baron.getLocation().clone();
     }
 
+    int knownBaronCount() {
+        return trackedBarons().size();
+    }
+
     LivingEntity spawnBaron(final Location location) {
         Objects.requireNonNull(location.getWorld(), "Spawn world cannot be null.");
-        despawnBaron();
+        sweepAllBarons();
 
         if (hasCitizensSupport()) {
             try {
@@ -172,20 +176,7 @@ final class FugitiveBaronController {
     }
 
     void despawnBaron() {
-        final LivingEntity baron = getBaronEntity();
-        if (baron != null) {
-            plugin.debugLog("Despawning Baron at " + formatLocation(baron.getLocation()));
-            if (isCitizensBaron(baron)) {
-                try {
-                    citizensSupport.despawnBaron();
-                } catch (final Throwable throwable) {
-                    disableCitizensIntegration("despawn", throwable);
-                    baron.remove();
-                }
-            } else {
-                baron.remove();
-            }
-        }
+        sweepAllBarons();
         this.baronId = null;
         this.currentTargetId = null;
         this.state = BaronState.IDLE;
@@ -343,6 +334,47 @@ final class FugitiveBaronController {
             }
         }
         return null;
+    }
+
+    private int sweepAllBarons() {
+        int removed = 0;
+        final java.util.Set<UUID> seen = new java.util.HashSet<>();
+        if (hasCitizensSupport()) {
+            try {
+                removed += citizensSupport.sweepSpawnedBarons();
+            } catch (final Throwable throwable) {
+                disableCitizensIntegration("baron sweep", throwable);
+            }
+        }
+        for (final World world : plugin.getServer().getWorlds()) {
+            for (final LivingEntity livingEntity : world.getLivingEntities()) {
+                if (!livingEntity.getPersistentDataContainer().has(plugin.baronKey(), PersistentDataType.BYTE)) {
+                    continue;
+                }
+                if (!seen.add(livingEntity.getUniqueId())) {
+                    continue;
+                }
+                plugin.debugLog("Sweeping John at " + formatLocation(livingEntity.getLocation()));
+                livingEntity.remove();
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            plugin.debugLog("Swept " + removed + " John entity(s) before respawn.");
+        }
+        return removed;
+    }
+
+    private java.util.Set<UUID> trackedBarons() {
+        final java.util.Set<UUID> barons = new java.util.HashSet<>();
+        for (final World world : plugin.getServer().getWorlds()) {
+            for (final LivingEntity livingEntity : world.getLivingEntities()) {
+                if (livingEntity.getPersistentDataContainer().has(plugin.baronKey(), PersistentDataType.BYTE)) {
+                    barons.add(livingEntity.getUniqueId());
+                }
+            }
+        }
+        return barons;
     }
 
     private Player findNearestPlayer(final Location origin, final double radius) {

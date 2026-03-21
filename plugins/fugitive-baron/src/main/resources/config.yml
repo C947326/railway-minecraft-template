@@ -43,7 +43,7 @@ hideouts:
     mood: "absurd technical ritual"
     clue: "Fresh copper polish and humming redstone say someone was here recently."
     ambient-line: "If you cannot hear the noise in the sky, you are not sick enough yet."
-    trust-intel: "The Baron taps the chair and murmurs: \"Watch the antennae. The strongest signal is never the safest.\""
+    trust-intel: "John taps the chair and murmurs: \"Watch the antennae. The strongest signal is never the safest.\""
     ambient-sound-id: "baron.hideout.hideout_antenna_nest"
   beach_cache:
     enabled: false
@@ -55,7 +55,7 @@ hideouts:
     mood: "temporary luxury in collapse"
     clue: "A burned note reads: 'dock compromised. move inland before dusk.'"
     ambient-line: "Coastlines are for exits, not holidays."
-    trust-intel: "The Baron glances toward the tide: \"When the beach goes quiet, the jungle is next.\""
+    trust-intel: "John glances toward the tide: \"When the beach goes quiet, the jungle is next.\""
     ambient-sound-id: "baron.hideout.hideout_beach_cache"
   cave_server_room:
     enabled: false
@@ -67,7 +67,7 @@ hideouts:
     mood: "hidden infrastructure"
     clue: "A lectern page says: 'root access revoked after the lantern failure.'"
     ambient-line: "Trust no machine you did not personally offend."
-    trust-intel: "The Baron lowers his voice: \"The cave keeps records. Records are both useful and unforgivable.\""
+    trust-intel: "John lowers his voice: \"The cave keeps records. Records are both useful and unforgivable.\""
     ambient-sound-id: "baron.hideout.hideout_cave_server_room"
   jungle_bunker:
     enabled: false
@@ -79,7 +79,7 @@ hideouts:
     mood: "camouflage and tropical delusion"
     clue: "A torn map has one hideout crossed out in charcoal and another circled twice."
     ambient-line: "Jungles reward preparation and punish confidence."
-    trust-intel: "The Baron smirks: \"People hide badly in jungles. They imagine leaves are encryption.\""
+    trust-intel: "John smirks: \"People hide badly in jungles. They imagine leaves are encryption.\""
     ambient-sound-id: "baron.hideout.hideout_jungle_bunker"
   ruined_dock:
     enabled: false
@@ -91,7 +91,7 @@ hideouts:
     mood: "hurried departure"
     clue: "A waterlogged ledger shows one shipment never left the pier."
     ambient-line: "Ports are merely queues with seagulls."
-    trust-intel: "The Baron flicks water off a crate: \"The dock tells you who lied to leave first.\""
+    trust-intel: "John flicks water off a crate: \"The dock tells you who lied to leave first.\""
     ambient-sound-id: "baron.hideout.hideout_ruined_dock"
   swamp_shack:
     enabled: false
@@ -103,7 +103,7 @@ hideouts:
     mood: "humid paranoia"
     clue: "Muddy boot tracks head north, and the lamp oil is still warm."
     ambient-line: "The swamp is honest. Everything announces its intentions."
-    trust-intel: "The Baron nods toward the reeds: \"The swamp remembers footsteps longer than people do.\""
+    trust-intel: "John nods toward the reeds: \"The swamp remembers footsteps longer than people do.\""
     ambient-sound-id: "baron.hideout.hideout_swamp_shack"
   watchpoint:
     enabled: false
@@ -115,5 +115,5 @@ hideouts:
     mood: "surveillance mania"
     clue: "A spyglass stand faces three trails, each marked with a scratched warning rune."
     ambient-line: "Height is not safety, but it improves the argument."
-    trust-intel: "The Baron adjusts the spyglass: \"From height, everyone confesses with their route choice.\""
+    trust-intel: "John adjusts the spyglass: \"From height, everyone confesses with their route choice.\""
     ambient-sound-id: "baron.hideout.hideout_watchpoint"

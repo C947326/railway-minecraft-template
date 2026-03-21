@@ -117,7 +117,7 @@ final class SeedStateRepository {
                 "y", child.getInt("y"),
                 "z", child.getInt("z"),
                 "variant", child.getString("variant", "velvet_lantern"),
-                "clue", child.getString("clue", "Someone here knew the Baron."),
+                "clue", child.getString("clue", "Someone here knew John."),
                 "nextLead", child.getString("next-lead", "The next whispers point outward.")
             ));
         }
