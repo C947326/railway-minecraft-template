@@ -1,4 +1,5 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import path from "node:path";
 
 type VoiceLine = {
@@ -14,7 +15,7 @@ const outputRoot = path.resolve(
 );
 const apiKey = process.env.EIDOS_API_KEY;
 const voice = process.env.BARON_TTS_VOICE ?? "en-US-AndrewMultilingualNeural";
-const format = "mp3";
+const format = "ogg";
 const overwrite = process.env.BARON_TTS_OVERWRITE === "true";
 
 if (!apiKey) {
@@ -40,7 +41,10 @@ for (const [category, lines] of Object.entries(manifest)) {
 		}
 
 		const bytes = await generateWithRetry(category, line);
-		await writeFile(outputPath, bytes);
+		const tempPath = path.join(categoryDir, `${line.id}.mp3`);
+		await writeFile(tempPath, bytes);
+		await convertMp3ToOgg(tempPath, outputPath);
+		await rm(tempPath, { force: true });
 		console.log(`Generated ${path.relative(process.cwd(), outputPath)}`);
 	}
 }
@@ -106,4 +110,34 @@ function extractRetryAfterSeconds(body: string) {
 
 function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function convertMp3ToOgg(inputPath: string, outputPath: string) {
+	await new Promise<void>((resolve, reject) => {
+		const process = spawn("ffmpeg", [
+			"-y",
+			"-i",
+			inputPath,
+			"-c:a",
+			"libvorbis",
+			"-q:a",
+			"5",
+			outputPath,
+		], {
+			stdio: ["ignore", "ignore", "pipe"],
+		});
+
+		let stderr = "";
+		process.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
+		});
+		process.on("error", reject);
+		process.on("close", (code) => {
+			if (code === 0) {
+				resolve();
+				return;
+			}
+			reject(new Error(`ffmpeg failed for ${path.basename(inputPath)}: ${stderr}`));
+		});
+	});
 }

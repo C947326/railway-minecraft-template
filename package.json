@@ -11,6 +11,7 @@
     "build": "bun run build:css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
     "start": "NODE_ENV=production bun src/index.ts",
     "baron:audio": "bun run tools/generate-baron-audio.ts",
+    "baron:audio:convert": "bun run tools/convert-baron-audio-to-ogg.ts",
     "baron:voice-bakeoff": "bun run tools/generate-baron-voice-bakeoff.ts",
     "baron:pack-resource-pack": "bun run tools/package-baron-resource-pack.ts"
   },
