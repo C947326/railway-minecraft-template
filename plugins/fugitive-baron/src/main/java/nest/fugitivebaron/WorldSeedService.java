@@ -458,7 +458,7 @@ final class WorldSeedService {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
         plugin.debugLog("Advanced Baron hunt to cycle " + nextCycle + " at hideout " + hideoutService.activeHideoutId() + ".");
         return Component.text(
-            "John bolts for " + hideoutService.activeHideoutName() + ". The Brothel Radar goes dirty again; the vice trail has reset.",
+            "John bolts into the dark before you can pin him properly. The Brothel Radar goes dirty again; the vice trail has reset.",
             NamedTextColor.GOLD
         );
     }
@@ -496,7 +496,7 @@ final class WorldSeedService {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
         plugin.debugLog("John escaped to hideout " + hideoutService.activeHideoutId() + " after losing line of sight.");
         return Component.text(
-            "John breaks line of sight and bolts for " + hideoutService.activeHideoutName() + ". The Brothel Radar goes dirty again.",
+            "John breaks line of sight and disappears into his network. The Brothel Radar goes dirty again.",
             NamedTextColor.GOLD
         );
     }
