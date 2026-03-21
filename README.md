@@ -50,14 +50,12 @@ bun start
 - `MC_SERVER_PORT` (optional, default: `25565` or `SERVER_PORT`)
 - `MC_STATUS_CACHE_MS` (optional, default: `8000`)
 - `MC_SHUTDOWN_NOTICE` (optional, default: a short shutdown message sent before stop)
-- `PORT` (preferred on Railway for the HTTP control UI bind port)
 - `CONTROL_PORT` (optional override, keep different from Minecraft)
 
 If you override the pipe path, also set `CONSOLE_IN_NAMED_PIPE` for the
 itzg container so both sides use the same location.
 
-On Railway, the control UI should bind to Railway's injected `PORT`.
-If you override it with `CONTROL_PORT`, ensure it is not the same port as the
+On Railway, ensure `CONTROL_PORT` is not the same port as the
 Minecraft `SERVER_PORT` (default `25565`) or the server will fail to bind.
 
 ## Container usage
