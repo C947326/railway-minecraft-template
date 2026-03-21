@@ -384,6 +384,7 @@ final class FugitiveBaronController {
             .stream()
             .filter(player -> !player.isDead())
             .filter(player -> player.getGameMode() != GameMode.SPECTATOR)
+            .filter(player -> !isBaron(player))
             .filter(player -> player.getLocation().distanceSquared(origin) <= radiusSquared)
             .min(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(origin)))
             .orElse(null);

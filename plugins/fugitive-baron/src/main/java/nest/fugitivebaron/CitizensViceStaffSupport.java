@@ -1,6 +1,8 @@
 package nest.fugitivebaron;
 
 import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.ai.Navigator;
+import net.citizensnpcs.api.ai.NavigatorParameters;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.GameModeTrait;
@@ -83,6 +85,45 @@ final class CitizensViceStaffSupport {
 
         npc.destroy();
         throw new IllegalStateException("Citizens spawned non-living vice-site staff.");
+    }
+
+    boolean isViceStaffEntity(final Entity entity, final String scoreboardTag) {
+        if (entity == null || !entity.getScoreboardTags().contains(scoreboardTag)) {
+            return false;
+        }
+        final NPCRegistry registry = registry();
+        return registry != null && registry.getNPC(entity) != null;
+    }
+
+    void navigateTo(final Entity entity, final Location destination, final float speedModifier) {
+        final NPCRegistry registry = registry();
+        if (registry == null || entity == null) {
+            return;
+        }
+        final NPC npc = registry.getNPC(entity);
+        if (npc == null || !npc.isSpawned()) {
+            return;
+        }
+        final Navigator navigator = npc.getNavigator();
+        navigator.setTarget(destination);
+        final NavigatorParameters parameters = navigator.getLocalParameters();
+        parameters.speedModifier(speedModifier);
+        parameters.distanceMargin(0.9D);
+        parameters.stationaryTicks(20);
+        parameters.updatePathRate(10);
+        parameters.straightLineTargetingDistance(6.0F);
+    }
+
+    void face(final Entity entity, final Location target) {
+        final NPCRegistry registry = registry();
+        if (registry == null || entity == null) {
+            return;
+        }
+        final NPC npc = registry.getNPC(entity);
+        if (npc == null || !npc.isSpawned()) {
+            return;
+        }
+        npc.faceLocation(target);
     }
 
     private NPCRegistry registry() {

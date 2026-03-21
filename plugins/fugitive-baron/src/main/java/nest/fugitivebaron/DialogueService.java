@@ -75,6 +75,21 @@ final class DialogueService {
         nextEligibleTick = currentTick + lineCooldownTicks;
     }
 
+    void deliverWitnessLine(
+        final Player player,
+        final String speaker,
+        final String line,
+        final String soundId,
+        final long currentTick
+    ) {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        deliverSubtitle(player, speaker, line);
+        playSound(player, soundId);
+        nextEligibleTick = Math.max(nextEligibleTick, currentTick + Math.max(30L, lineCooldownTicks / 2L));
+    }
+
     void deliverSubtitle(final Player player, final String speaker, final String line) {
         final Component subtitle = Component.text("[" + speaker + "] ", NamedTextColor.GOLD)
             .append(Component.text(line, NamedTextColor.WHITE));

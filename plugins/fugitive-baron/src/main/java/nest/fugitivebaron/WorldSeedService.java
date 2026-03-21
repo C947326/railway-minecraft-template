@@ -3,12 +3,16 @@ package nest.fugitivebaron;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
@@ -17,6 +21,7 @@ import org.bukkit.block.Lectern;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Directional;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.Villager;
@@ -30,6 +35,8 @@ final class WorldSeedService {
     private static final int DEFAULT_MAX_HUNT_CYCLES = 3;
     private static final String VICE_STAFF_TAG = "vice_staff";
     private static final String VICE_QUIP_TAG = "vice_quip";
+    private static final long VICE_STAFF_MOVE_INTERVAL_TICKS = 80L;
+    private static final long VICE_STAFF_AMBIENT_INTERVAL_TICKS = 140L;
 
     private final FugitiveBaronPlugin plugin;
     private final HideoutService hideoutService;
@@ -38,6 +45,9 @@ final class WorldSeedService {
     private final SettlementLocator settlementLocator;
     private final StructurePainter painter;
     private final List<ViceSite> viceSites = new ArrayList<>();
+    private final Map<UUID, Long> viceStaffInteractionCooldowns = new HashMap<>();
+    private final Map<UUID, Long> viceStaffMovementTicks = new HashMap<>();
+    private final Map<UUID, Long> viceStaffAmbientTicks = new HashMap<>();
     private CitizensViceStaffSupport citizensViceStaffSupport;
     private boolean citizensViceStaffUnavailable;
 
@@ -87,6 +97,25 @@ final class WorldSeedService {
                 + seedStateRepository.seedVersion(),
             NamedTextColor.YELLOW
         );
+    }
+
+    void tick(final long currentTick) {
+        for (final ViceSite site : viceSites) {
+            final World world = site.location().getWorld();
+            if (world == null) {
+                continue;
+            }
+            for (final org.bukkit.entity.LivingEntity entity : world.getLivingEntities()) {
+                if (!isViceStaff(entity)) {
+                    continue;
+                }
+                if (entity.getLocation().distanceSquared(site.location()) > 100.0D) {
+                    continue;
+                }
+                maybeMoveViceStaff(entity, site, currentTick);
+                maybePlayViceStaffAmbient(entity, currentTick);
+            }
+        }
     }
 
     Component seedAntennaNest() {
@@ -298,6 +327,49 @@ final class WorldSeedService {
                 .append(Component.text(fragment, NamedTextColor.GREEN));
         }
         return hideoutService.nearbyHideoutIntelFor(player, radius);
+    }
+
+    boolean isViceStaff(final Entity entity) {
+        if (entity == null || !entity.getScoreboardTags().contains(VICE_STAFF_TAG)) {
+            return false;
+        }
+        if (hasCitizensViceStaffSupport()) {
+            try {
+                if (citizensViceStaffSupport.isViceStaffEntity(entity, VICE_STAFF_TAG)) {
+                    return true;
+                }
+            } catch (final Throwable throwable) {
+                disableCitizensViceStaff("vice-staff identity", throwable);
+            }
+        }
+        return entity instanceof Villager;
+    }
+
+    void handleViceStaffInteraction(final Player player, final Entity entity) {
+        if (!(entity instanceof org.bukkit.entity.LivingEntity livingEntity) || !isViceStaff(entity)) {
+            return;
+        }
+        final long currentTick = plugin.currentTick();
+        final long nextAllowedTick = viceStaffInteractionCooldowns.getOrDefault(player.getUniqueId(), 0L);
+        if (currentTick < nextAllowedTick) {
+            return;
+        }
+
+        final ViceSite site = nearestViceSite(entity.getLocation());
+        if (site == null) {
+            return;
+        }
+        final WorldContentLibrary.ViceVariant variant = viceVariant(site.variant());
+        if (variant == null || variant.npcQuips().isEmpty()) {
+            return;
+        }
+
+        final String speaker = plainName(livingEntity.customName(), entity.getName());
+        final String line = variant.npcQuips().get(ThreadLocalRandom.current().nextInt(variant.npcQuips().size()));
+        plugin.dialogueService().deliverWitnessLine(player, speaker, line, null, currentTick);
+        entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_VILLAGER_AMBIENT, SoundCategory.NEUTRAL, 0.9F, randomPitch());
+        faceViceStaff(entity, player.getLocation());
+        viceStaffInteractionCooldowns.put(player.getUniqueId(), currentTick + 20L);
     }
 
     Component advanceHuntAfterConfrontation(final Player player) {
@@ -726,6 +798,49 @@ final class WorldSeedService {
         }
     }
 
+    private void maybeMoveViceStaff(final org.bukkit.entity.LivingEntity entity, final ViceSite site, final long currentTick) {
+        final long nextMoveTick = viceStaffMovementTicks.getOrDefault(entity.getUniqueId(), 0L);
+        if (currentTick < nextMoveTick) {
+            return;
+        }
+        final Location siteCenter = site.location();
+        final Location current = entity.getLocation();
+        final Location destination = siteCenter.clone().add(
+            ThreadLocalRandom.current().nextDouble(-1.75D, 1.75D),
+            1.0D,
+            ThreadLocalRandom.current().nextDouble(-1.75D, 1.75D)
+        );
+        destination.setYaw((float) (ThreadLocalRandom.current().nextDouble(360.0D) - 180.0D));
+
+        if (hasCitizensViceStaffSupport()) {
+            try {
+                citizensViceStaffSupport.navigateTo(entity, destination, 1.05F);
+            } catch (final Throwable throwable) {
+                disableCitizensViceStaff("vice-staff navigation", throwable);
+            }
+        } else if (entity instanceof Villager villager) {
+            villager.setAI(true);
+            villager.getPathfinder().moveTo(destination);
+        }
+
+        if (current.distanceSquared(siteCenter) > 16.0D) {
+            faceViceStaff(entity, siteCenter);
+        }
+        viceStaffMovementTicks.put(entity.getUniqueId(), currentTick + VICE_STAFF_MOVE_INTERVAL_TICKS + ThreadLocalRandom.current().nextLong(40L));
+    }
+
+    private void maybePlayViceStaffAmbient(final org.bukkit.entity.LivingEntity entity, final long currentTick) {
+        final long nextAmbientTick = viceStaffAmbientTicks.getOrDefault(entity.getUniqueId(), 0L);
+        if (currentTick < nextAmbientTick) {
+            return;
+        }
+        final Player nearby = findNearbyPlayer(entity.getLocation(), 8.0D);
+        if (nearby != null) {
+            entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_VILLAGER_AMBIENT, SoundCategory.NEUTRAL, 0.65F, randomPitch());
+        }
+        viceStaffAmbientTicks.put(entity.getUniqueId(), currentTick + VICE_STAFF_AMBIENT_INTERVAL_TICKS + ThreadLocalRandom.current().nextLong(100L));
+    }
+
     private boolean spawnViceStaffEntity(final Location npcLocation, final String npcName, final String skinName) {
         if (!hasCitizensViceStaffSupport()) {
             return false;
@@ -754,6 +869,56 @@ final class WorldSeedService {
                 + throwable.getClass().getSimpleName()
                 + (throwable.getMessage() == null || throwable.getMessage().isBlank() ? "" : " - " + throwable.getMessage())
         );
+    }
+
+    private void faceViceStaff(final Entity entity, final Location target) {
+        if (hasCitizensViceStaffSupport()) {
+            try {
+                citizensViceStaffSupport.face(entity, target);
+                return;
+            } catch (final Throwable throwable) {
+                disableCitizensViceStaff("vice-staff facing", throwable);
+            }
+        }
+        entity.setRotation(target.getYaw(), target.getPitch());
+    }
+
+    private Player findNearbyPlayer(final Location location, final double radius) {
+        if (location.getWorld() == null) {
+            return null;
+        }
+        return location.getWorld().getPlayers().stream()
+            .filter(player -> player.getGameMode() == org.bukkit.GameMode.SURVIVAL || player.getGameMode() == org.bukkit.GameMode.ADVENTURE)
+            .filter(player -> !controller.isBaron(player))
+            .filter(player -> !isViceStaff(player))
+            .filter(player -> player.getLocation().distanceSquared(location) <= radius * radius)
+            .min(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(location)))
+            .orElse(null);
+    }
+
+    private ViceSite nearestViceSite(final Location location) {
+        return viceSites.stream()
+            .filter(site -> site.location().getWorld() != null)
+            .filter(site -> site.location().getWorld().equals(location.getWorld()))
+            .min(Comparator.comparingDouble(site -> site.location().distanceSquared(location)))
+            .orElse(null);
+    }
+
+    private WorldContentLibrary.ViceVariant viceVariant(final String id) {
+        for (final WorldContentLibrary.ViceVariant variant : WorldContentLibrary.viceVariants()) {
+            if (variant.id().equalsIgnoreCase(id)) {
+                return variant;
+            }
+        }
+        return null;
+    }
+
+    private String plainName(final Component component, final String fallback) {
+        return fallback;
+    }
+
+    private float randomPitch() {
+        return (float) ThreadLocalRandom.current().nextDouble(0.85D, 1.15D);
     }
 
     private RadarSignal toRadarSignal(final Location playerLocation, final ViceSite site) {

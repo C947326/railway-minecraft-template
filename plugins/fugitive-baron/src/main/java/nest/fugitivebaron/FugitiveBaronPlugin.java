@@ -42,6 +42,7 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         this.debugLogging = getConfig().getBoolean("encounter.debug-logging", false);
 
         getServer().getPluginManager().registerEvents(new BaronListener(this, controller, radarService), this);
+        getServer().getPluginManager().registerEvents(new ViceStaffListener(worldSeedService), this);
         if (getServer().getPluginManager().getPlugin("Citizens") != null) {
             getServer().getPluginManager().registerEvents(new CitizensBaronListener(this, controller), this);
         } else if (getConfig().getBoolean("encounter.prefer-citizens-player-npc", true)) {
@@ -56,6 +57,7 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, () -> {
             currentTick++;
             controller.tick(currentTick);
+            worldSeedService.tick(currentTick);
             radarService.maybeUpdateRadarTargets(currentTick);
         }, 1L, 1L);
     }
@@ -96,6 +98,10 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
 
     void refreshRadar(final org.bukkit.entity.Player player) {
         radarService.refreshRadarFor(player);
+    }
+
+    DialogueService dialogueService() {
+        return dialogueService;
     }
 
     void advanceBaronHunt(final Player player) {
