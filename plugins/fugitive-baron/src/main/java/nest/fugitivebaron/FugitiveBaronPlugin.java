@@ -111,6 +111,7 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         }
         for (final Player online : getServer().getOnlinePlayers()) {
             radarService.refreshRadarFor(online);
+            online.sendActionBar(worldSeedService.radarSummaryFor(online));
         }
     }
 
@@ -121,6 +122,7 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         }
         for (final Player online : getServer().getOnlinePlayers()) {
             radarService.refreshRadarFor(online);
+            online.sendActionBar(worldSeedService.radarSummaryFor(online));
         }
     }
 

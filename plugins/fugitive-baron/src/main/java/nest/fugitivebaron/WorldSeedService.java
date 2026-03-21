@@ -714,6 +714,7 @@ final class WorldSeedService {
             enchantedHelmet("Surveillance Helmet"),
             enchantedBoots("Escape Boots"),
             enchantedBoots("Escape Boots"),
+            recognitionPowder(2),
             new ItemStack(Material.GUNPOWDER, 16),
             WorldContentLibrary.escapeNotePaper(),
             new ItemStack(Material.IRON_INGOT, 2)
@@ -794,6 +795,7 @@ final class WorldSeedService {
             WorldContentLibrary.repaymentCertificate(),
             enchantedHelmet("Strategic Helmet"),
             enchantedBoots("Stairwell Boots"),
+            recognitionPowder(1),
             new ItemStack(Material.GUNPOWDER, 12),
             new ItemStack(Material.COOKED_BEEF, 5)
         ));
@@ -953,6 +955,7 @@ final class WorldSeedService {
             new ItemStack(Material.DIAMOND, ThreadLocalRandom.current().nextInt(1, 4)),
             namedItem(Material.NETHERITE_SWORD, "Collector's Measure"),
             namedItem(Material.NETHERITE_AXE, "Negotiation Aid"),
+            recognitionPowder(1),
             new ItemStack(Material.GUNPOWDER, ThreadLocalRandom.current().nextInt(4, 10)),
             potion(Material.POTION, PotionType.STRONG_HEALING, 1),
             potion(Material.SPLASH_POTION, PotionType.STRONG_SWIFTNESS, 1),
@@ -1475,6 +1478,12 @@ final class WorldSeedService {
         return item;
     }
 
+    private ItemStack recognitionPowder(final int amount) {
+        final ItemStack powder = plugin.createRecognitionItem();
+        powder.setAmount(Math.max(1, amount));
+        return powder;
+    }
+
     private ItemStack enchantedHelmet(final String name) {
         final ItemStack item = namedItem(Material.TURTLE_HELMET, name);
         item.addUnsafeEnchantment(Enchantment.AQUA_AFFINITY, 1);
@@ -1526,6 +1535,9 @@ final class WorldSeedService {
         }
         if (random.nextDouble() < 0.50D) {
             loot.add(new ItemStack(Material.GUNPOWDER, random.nextInt(8, 17)));
+        }
+        if (random.nextDouble() < 0.65D) {
+            loot.add(recognitionPowder(1));
         }
 
         return loot;

@@ -47,7 +47,7 @@ hideouts:
     trust-intel: "John taps the chair and murmurs: \"Watch the antennae. The strongest signal is never the safest.\""
     ambient-sound-id: "baron.hideout.hideout_antenna_nest"
   beach_cache:
-    enabled: false
+    enabled: true
     name: "Beach Cache"
     world: "world"
     x: -340.0
@@ -71,7 +71,7 @@ hideouts:
     trust-intel: "John glances around the stonework: \"Crorgan understood one thing: paranoia should have storage.\""
     ambient-sound-id: "baron.hideout.hideout_cave_server_room"
   jungle_bunker:
-    enabled: false
+    enabled: true
     name: "Jungle Bunker"
     world: "world"
     x: -128.0
@@ -83,7 +83,7 @@ hideouts:
     trust-intel: "John smirks: \"People hide badly in jungles. They imagine leaves are encryption.\""
     ambient-sound-id: "baron.hideout.hideout_jungle_bunker"
   ruined_dock:
-    enabled: false
+    enabled: true
     name: "Ruined Dock"
     world: "world"
     x: 284.0
@@ -95,7 +95,7 @@ hideouts:
     trust-intel: "John flicks water off a crate: \"The dock tells you who lied to leave first.\""
     ambient-sound-id: "baron.hideout.hideout_ruined_dock"
   swamp_shack:
-    enabled: false
+    enabled: true
     name: "Swamp Shack"
     world: "world"
     x: -612.0
@@ -107,7 +107,7 @@ hideouts:
     trust-intel: "John nods toward the reeds: \"The swamp remembers footsteps longer than people do.\""
     ambient-sound-id: "baron.hideout.hideout_swamp_shack"
   watchpoint:
-    enabled: false
+    enabled: true
     name: "Savanna Watchpoint"
     world: "world"
     x: 703.0
