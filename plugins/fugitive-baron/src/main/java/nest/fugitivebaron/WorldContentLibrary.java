@@ -60,14 +60,14 @@ final class WorldContentLibrary {
                 "Velvet Lantern",
                 "He rented the upstairs room, insulted the weather, and kept asking which ridge had the cleanest view of the sky.",
                 "The girls say he left with copper, maps, and panic. The next whisper points outward toward the hills.",
-                List.of("Madam Sable", "Hostess Inez", "Hostess Mirelle", "Bartender June")
+                List.of("Madam Sable", "Escort Inez", "Dancer Mirelle", "Escort Celeste", "Bartender June")
             ),
             new ViceVariant(
                 "dockside_parlour",
                 "Dockside Parlour",
                 "He bought the house a round, paid in emeralds, and asked whether anyone here knew the road away from creditors and church bells.",
                 "A bookkeeper heard him muttering about the ridge antenna and the need to get above the town lights.",
-                List.of("Madam Pearl", "Hostess Ada", "Bartender Ruth", "Bouncer Brigid")
+                List.of("Madam Pearl", "Dancer Ada", "Escort Ruth", "Bartender Sybil", "Bouncer Brigid")
             )
         );
     }

@@ -89,6 +89,11 @@ final class DragonRadarService {
         if (clue != null) {
             player.sendMessage(clue);
         }
+        updatePlayerRadar(player);
+    }
+
+    void refreshRadarFor(final Player player) {
+        updatePlayerRadar(player);
     }
 
     boolean isDragonRadar(final ItemStack stack) {

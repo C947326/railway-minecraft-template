@@ -40,7 +40,7 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
         @NotNull final String[] args
     ) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /fugitivebaron <spawn|despawn|item|radar|hideout|seed|reload>", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /fugitivebaron <spawn|despawn|item|radar [reset [player]|resetall]|hideout|seed|reload>", NamedTextColor.RED));
             return true;
         }
 
@@ -75,6 +75,31 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             case "radar" -> {
+                if (args.length >= 2 && "resetall".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(worldSeedService.resetAllRadarProgress());
+                    for (final Player online : plugin.getServer().getOnlinePlayers()) {
+                        plugin.refreshRadar(online);
+                    }
+                    return true;
+                }
+                if (args.length >= 2 && "reset".equalsIgnoreCase(args[1])) {
+                    final Player target;
+                    if (args.length >= 3) {
+                        target = plugin.getServer().getPlayerExact(args[2]);
+                        if (target == null) {
+                            sender.sendMessage(Component.text("Player not found: " + args[2], NamedTextColor.RED));
+                            return true;
+                        }
+                    } else if (sender instanceof Player player) {
+                        target = player;
+                    } else {
+                        sender.sendMessage(Component.text("Console usage: /fugitivebaron radar reset <player>", NamedTextColor.RED));
+                        return true;
+                    }
+                    sender.sendMessage(worldSeedService.resetRadarProgress(target));
+                    plugin.refreshRadar(target);
+                    return true;
+                }
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Component.text("Only players can receive the radar.", NamedTextColor.RED));
                     return true;
@@ -154,6 +179,12 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
     ) {
         if (args.length == 1) {
             return List.of("spawn", "despawn", "item", "radar", "hideout", "seed", "reload");
+        }
+        if (args.length == 2 && "radar".equalsIgnoreCase(args[0])) {
+            return List.of("reset", "resetall");
+        }
+        if (args.length == 3 && "radar".equalsIgnoreCase(args[0]) && "reset".equalsIgnoreCase(args[1])) {
+            return plugin.getServer().getOnlinePlayers().stream().map(Player::getName).sorted().toList();
         }
         if (args.length == 2 && "hideout".equalsIgnoreCase(args[0])) {
             final List<String> options = hideoutService.hideouts().stream().map(Hideout::id).toList();

@@ -155,6 +155,31 @@ final class SeedStateRepository {
         save();
     }
 
+    void resetViceSiteDiscoveries(final UUID playerId) {
+        config.set("discoveries." + playerId + ".vice-sites", null);
+        save();
+    }
+
+    int resetAllViceSiteDiscoveries() {
+        final ConfigurationSection discoveries = config.getConfigurationSection("discoveries");
+        if (discoveries == null) {
+            return 0;
+        }
+
+        int reset = 0;
+        for (final String playerId : discoveries.getKeys(false)) {
+            final String path = "discoveries." + playerId + ".vice-sites";
+            if (config.isList(path)) {
+                config.set(path, null);
+                reset++;
+            }
+        }
+        if (reset > 0) {
+            save();
+        }
+        return reset;
+    }
+
     private String key(final Location location) {
         final String world = location.getWorld() == null ? "unknown" : location.getWorld().getName();
         return world + ":" + location.getBlockX() + ":" + location.getBlockY() + ":" + location.getBlockZ();

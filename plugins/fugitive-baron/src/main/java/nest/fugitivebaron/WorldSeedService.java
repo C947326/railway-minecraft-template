@@ -198,23 +198,20 @@ final class WorldSeedService {
 
         final Location spawn = world.getSpawnLocation();
         final List<WorldContentLibrary.ViceVariant> variants = WorldContentLibrary.viceVariants();
-        int seeded = 0;
+        int refreshed = 0;
         for (int index = 0; index < 4; index++) {
-            if (viceSites.size() > index) {
-                continue;
-            }
             final WorldContentLibrary.ViceVariant variant = variants.get(index % variants.size());
-            final Location location = chooseViceLocation(spawn, index);
+            final String id = "vice_" + (index + 1);
+            final Location location = savedViceLocation(id, chooseViceLocation(spawn, index));
             if (location == null) {
                 continue;
             }
-            final String id = "vice_" + (index + 1);
             seedViceSite(id, variant, location);
-            seeded++;
+            refreshed++;
         }
         return Component.text(
-            "Seeded " + seeded + " vice site(s).",
-            seeded > 0 ? NamedTextColor.GREEN : NamedTextColor.YELLOW
+            "Seeded or refreshed " + refreshed + " vice site(s).",
+            refreshed > 0 ? NamedTextColor.GREEN : NamedTextColor.YELLOW
         );
     }
 
@@ -275,6 +272,25 @@ final class WorldSeedService {
                 .append(Component.text(discovered.nextLead(), NamedTextColor.YELLOW));
         }
         return hideoutService.nearbyHideoutIntelFor(player, radius);
+    }
+
+    Component resetRadarProgress(final Player player) {
+        final int previousCount = seedStateRepository.discoveredViceSites(player.getUniqueId()).size();
+        seedStateRepository.resetViceSiteDiscoveries(player.getUniqueId());
+        plugin.debugLog("Reset Brothel Radar progression for " + player.getName() + " (" + previousCount + " cleared).");
+        return Component.text(
+            "Reset Brothel Radar progression for " + player.getName() + ". Cleared " + previousCount + " discovered vice site(s).",
+            NamedTextColor.GREEN
+        );
+    }
+
+    Component resetAllRadarProgress() {
+        final int resetCount = seedStateRepository.resetAllViceSiteDiscoveries();
+        plugin.debugLog("Reset Brothel Radar progression for " + resetCount + " player profile(s).");
+        return Component.text(
+            "Reset Brothel Radar progression for " + resetCount + " player profile(s).",
+            resetCount > 0 ? NamedTextColor.GREEN : NamedTextColor.YELLOW
+        );
     }
 
     private ViceSite nearestUndiscoveredViceWithin(final Player player, final double radius) {
@@ -419,6 +435,15 @@ final class WorldSeedService {
         }
     }
 
+    private Location savedViceLocation(final String siteId, final Location fallback) {
+        for (final ViceSite viceSite : viceSites) {
+            if (viceSite.id().equalsIgnoreCase(siteId)) {
+                return viceSite.location().clone();
+            }
+        }
+        return fallback;
+    }
+
     private Location chooseViceLocation(final Location spawn, final int index) {
         final World world = spawn.getWorld();
         if (world == null) {
@@ -438,6 +463,8 @@ final class WorldSeedService {
         if (world == null) {
             return;
         }
+        removeExistingViceSite(id);
+        clearViceStaff(location);
         final int baseX = location.getBlockX() - 3;
         final int baseZ = location.getBlockZ() - 3;
         final int baseY = location.getBlockY();
@@ -490,15 +517,44 @@ final class WorldSeedService {
         plugin.debugLog("Seeded vice site " + id + " at " + format(location));
     }
 
+    private void removeExistingViceSite(final String id) {
+        viceSites.removeIf(site -> site.id().equalsIgnoreCase(id));
+    }
+
+    private void clearViceStaff(final Location location) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return;
+        }
+        for (final Villager villager : world.getEntitiesByClass(Villager.class)) {
+            if (villager.getLocation().distanceSquared(location) > 64.0D) {
+                continue;
+            }
+            final Component customName = villager.customName();
+            if (customName == null) {
+                continue;
+            }
+            villager.remove();
+        }
+    }
+
     private void spawnViceStaff(final Location location, final WorldContentLibrary.ViceVariant variant) {
         final World world = location.getWorld();
         if (world == null) {
             return;
         }
-        int offset = 0;
+        final double[][] pads = {
+            {-1.25D, 1.0D, -1.25D},
+            {1.25D, 1.0D, -1.25D},
+            {-1.25D, 1.0D, 1.25D},
+            {1.25D, 1.0D, 1.25D},
+            {0.0D, 1.0D, 0.25D}
+        };
+        int index = 0;
         for (final String npcName : variant.npcNames()) {
-            final Location npcLocation = location.clone().add((offset % 2) - 0.5D, 0, (offset / 2) - 0.5D);
-            offset++;
+            final double[] pad = pads[index % pads.length];
+            final Location npcLocation = location.clone().add(pad[0], pad[1], pad[2]);
+            index++;
             world.spawn(npcLocation, Villager.class, villager -> {
                 villager.customName(Component.text(npcName, NamedTextColor.LIGHT_PURPLE));
                 villager.setCustomNameVisible(true);
@@ -508,6 +564,9 @@ final class WorldSeedService {
                 villager.setCanPickupItems(false);
                 villager.setProfession(Villager.Profession.NONE);
                 villager.setAdult();
+                villager.setAI(false);
+                villager.setInvulnerable(true);
+                villager.setCollidable(false);
             });
         }
     }
@@ -620,6 +679,7 @@ final class WorldSeedService {
             barrel.update(true, true);
             if (block.getState() instanceof Barrel placedBarrel) {
                 populateInventory(placedBarrel.getInventory(), items);
+                placedBarrel.update(true, true);
             }
         }
     }
@@ -631,6 +691,7 @@ final class WorldSeedService {
             chest.update(true, true);
             if (block.getState() instanceof Chest placedChest) {
                 populateInventory(placedChest.getBlockInventory(), items);
+                placedChest.update(true, true);
             }
         }
     }

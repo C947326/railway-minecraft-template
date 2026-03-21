@@ -93,6 +93,10 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         radarService.ensurePlayerHasStarterRadar(player);
     }
 
+    void refreshRadar(final org.bukkit.entity.Player player) {
+        radarService.refreshRadarFor(player);
+    }
+
     NamespacedKey baronKey() {
         return baronKey;
     }
