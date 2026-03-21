@@ -5,9 +5,12 @@ COPY package.json bun.lock ./
 RUN bun install
 
 COPY src ./src
+COPY tools ./tools
+COPY plugins/fugitive-baron/resource-pack-template ./plugins/fugitive-baron/resource-pack-template
 COPY bunfig.toml tsconfig.json postcss.config.cjs tailwind.config.ts components.json ./
 
 RUN bunx tailwindcss -c tailwind.config.ts -i src/index.css -o src/tailwind.css --minify
+RUN bun run baron:pack-resource-pack
 RUN bun build ./src/index.ts --compile --outfile=server
 
 FROM gradle:8.14.3-jdk21 AS plugin-builder
@@ -24,6 +27,7 @@ ENV CONTROL_PORT=3000
 
 WORKDIR /app
 COPY --from=builder /build/server ./server
+COPY --from=builder /build/plugins/fugitive-baron/fugitive-baron-resource-pack.zip /app/resource-pack/fugitive-baron-resource-pack.zip
 COPY --from=plugin-builder /build/plugins/fugitive-baron/build/libs/*.jar /app/plugins-bundled/
 COPY docker/start.sh /app/docker/start.sh
 

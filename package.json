@@ -12,7 +12,6 @@
     "start": "NODE_ENV=production bun src/index.ts",
     "baron:audio": "bun run tools/generate-baron-audio.ts",
     "baron:voice-bakeoff": "bun run tools/generate-baron-voice-bakeoff.ts",
-    "baron:generate-radar-texture": "bun run tools/generate-dragon-radar-texture.ts",
     "baron:pack-resource-pack": "bun run tools/package-baron-resource-pack.ts"
   },
   "dependencies": {

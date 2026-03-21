@@ -68,10 +68,10 @@ command options: https://docker-minecraft-server.readthedocs.io/en/latest/sendin
 ### Bundled plugin pipeline
 
 This image now also builds the Paper plugin in
-[plugins/fugitive-baron](/Users/dao/Software/Crorgans%20Nest/plugins/fugitive-baron)
+`/Users/dao/Software/Crorgans Nest/plugins/fugitive-baron`
 during the Docker build using a Gradle JDK 21 stage.
 
-On container startup, [docker/start.sh](/Users/dao/Software/Crorgans%20Nest/docker/start.sh)
+On container startup, `/Users/dao/Software/Crorgans Nest/docker/start.sh`
 copies any bundled plugin jars from `/app/plugins-bundled` into `/data/plugins`
 before the dashboard starts. Because the Minecraft server itself is launched
 later via `/start`, the plugin is already in the correct place by the time
@@ -82,6 +82,32 @@ This makes Railway deploys deterministic:
 - Railway builds the plugin jar as part of the image
 - the container syncs bundled jars into the persistent plugins directory on boot
 - pressing `Power on` starts Minecraft with the latest bundled plugin already installed
+
+### Automatic resource pack delivery
+
+The Docker image also bundles:
+
+- `/app/resource-pack/fugitive-baron-resource-pack.zip`
+
+On startup, `/app/docker/start.sh` computes the pack SHA-1 and exports:
+
+- `RESOURCE_PACK`
+- `RESOURCE_PACK_SHA1`
+- `RESOURCE_PACK_ENFORCE`
+
+The Bun app serves the zip at:
+
+- `/resource-pack/fugitive-baron-resource-pack.zip`
+
+On Railway, that should resolve to:
+
+- `https://$RAILWAY_PUBLIC_DOMAIN/resource-pack/fugitive-baron-resource-pack.zip`
+
+So clients should be prompted automatically to download the pack when they join, provided the deployment is using the current image.
+
+The pack is presently voice-only. The `Brothel Radar` intentionally keeps the
+vanilla compass appearance until there is a genuinely good custom asset worth
+shipping.
 
 ## Notes
 

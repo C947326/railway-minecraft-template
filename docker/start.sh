@@ -9,6 +9,7 @@ run_gid="${GID:-1000}"
 app_pid=""
 bundled_plugins_dir="${BUNDLED_PLUGINS_DIR:-/app/plugins-bundled}"
 managed_plugins_dir="${MANAGED_PLUGINS_DIR:-/data/plugins}"
+resource_pack_path="${RESOURCE_PACK_PATH:-/app/resource-pack/fugitive-baron-resource-pack.zip}"
 
 shutdown() {
   if [[ -n "${app_pid}" ]]; then
@@ -36,7 +37,37 @@ install_bundled_plugins() {
   shopt -u nullglob
 }
 
+configure_resource_pack() {
+  if [[ ! -f "${resource_pack_path}" ]]; then
+    return
+  fi
+
+  local public_domain="${RAILWAY_PUBLIC_DOMAIN:-}"
+  local resource_pack_url="${RESOURCE_PACK_PUBLIC_URL:-}"
+
+  if [[ -z "${resource_pack_url}" ]]; then
+    if [[ -z "${public_domain}" ]]; then
+      return
+    fi
+    resource_pack_url="https://${public_domain}/resource-pack/fugitive-baron-resource-pack.zip"
+  fi
+
+  local resource_pack_sha1=""
+  if command -v sha1sum >/dev/null 2>&1; then
+    resource_pack_sha1="$(sha1sum "${resource_pack_path}" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    resource_pack_sha1="$(shasum -a 1 "${resource_pack_path}" | awk '{print $1}')"
+  fi
+
+  if [[ -n "${resource_pack_sha1}" ]]; then
+    export RESOURCE_PACK="${resource_pack_url}"
+    export RESOURCE_PACK_SHA1="${resource_pack_sha1}"
+    export RESOURCE_PACK_ENFORCE="${RESOURCE_PACK_ENFORCE:-TRUE}"
+  fi
+}
+
 install_bundled_plugins
+configure_resource_pack
 
 if command -v gosu >/dev/null 2>&1; then
   gosu "${run_uid}:${run_gid}" "${app_entry}" &

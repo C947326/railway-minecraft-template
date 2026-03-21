@@ -34,6 +34,7 @@ const RAILWAY_OAUTH_CLIENT_CACHE_PATH = path.join(
 const RAILWAY_AUTH_COOKIE_NAME = "railway_oauth_access_token";
 const SERVICE_AUTH_CACHE_MS = 15_000;
 const PKCE_SESSION_TTL_MS = 5 * 60 * 1000;
+const BARON_RESOURCE_PACK_PATH = "/app/resource-pack/fugitive-baron-resource-pack.zip";
 
 const json = (data: unknown, init: ResponseInit = {}) =>
 	new Response(JSON.stringify(data), {
@@ -1685,6 +1686,20 @@ const server = Bun.serve<ConsoleLogSocketData>({
 						{ status: 409 },
 					);
 				}
+			},
+		},
+		"/resource-pack/fugitive-baron-resource-pack.zip": {
+			GET: async () => {
+				const file = Bun.file(BARON_RESOURCE_PACK_PATH);
+				if (!(await file.exists())) {
+					return new Response("Not found.", { status: 404 });
+				}
+				return new Response(file, {
+					headers: {
+						"Content-Type": "application/zip",
+						"Cache-Control": "public, max-age=3600",
+					},
+				});
 			},
 		},
 		"/api/console/ws": {

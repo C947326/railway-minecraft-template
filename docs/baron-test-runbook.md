@@ -19,7 +19,7 @@ bun run baron:pack-resource-pack
 
 This creates:
 
-[fugitive-baron-resource-pack.zip](/Users/dao/Software/Crorgans%20Nest/plugins/fugitive-baron/fugitive-baron-resource-pack.zip)
+`/Users/dao/Software/Crorgans Nest/plugins/fugitive-baron/fugitive-baron-resource-pack.zip`
 
 ## 2. Deploy The Server
 
@@ -48,18 +48,24 @@ Look for messages containing:
 - `[BaronDebug] Delivered line`
 - `[BaronDebug] Played sound`
 
-## 4. Install The Resource Pack On Your Client
+## 4. Accept The Resource Pack Prompt
 
-Because this setup does not yet host the pack through `server.properties`, install it manually in your Minecraft client:
+The current deployment should now advertise the Baron resource pack automatically using the server's public Railway URL.
 
-1. take [fugitive-baron-resource-pack.zip](/Users/dao/Software/Crorgans%20Nest/plugins/fugitive-baron/fugitive-baron-resource-pack.zip)
+When you join the server, Minecraft should prompt you to download the pack.
+
+Accept it.
+
+If the prompt does not appear, install the pack manually:
+
+1. take `/Users/dao/Software/Crorgans Nest/plugins/fugitive-baron/fugitive-baron-resource-pack.zip`
 2. open Minecraft
 3. go to `Options -> Resource Packs`
 4. click `Open Pack Folder`
 5. copy the zip into that folder
 6. enable the pack
 
-Without this step, you will still see subtitles but hear no Baron voice audio.
+Without the pack, you will still see subtitles but hear no Baron voice audio.
 
 ## 5. Manifest The Baron In-Game
 

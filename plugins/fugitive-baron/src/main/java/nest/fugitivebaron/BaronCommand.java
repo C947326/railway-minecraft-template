@@ -45,7 +45,12 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
             case "spawn" -> {
                 try {
                     final LivingEntity baron = controller.spawnBaronAtActiveHideout();
-                    sender.sendMessage(Component.text("Spawned the Baron at active hideout " + format(baron.getLocation()) + ".", NamedTextColor.GREEN));
+                    final String activeHideoutId = hideoutService.activeHideoutId();
+                    final String activeHideoutName = hideoutService.activeHideoutName();
+                    sender.sendMessage(Component.text(
+                        "Spawned the Baron at " + activeHideoutId + " (" + activeHideoutName + ") " + format(baron.getLocation()) + ".",
+                        NamedTextColor.GREEN
+                    ));
                     baron.getWorld().spawnParticle(org.bukkit.Particle.CLOUD, baron.getLocation().add(0, 0.6, 0), 12, 0.3, 0.3, 0.3, 0.01);
                 } catch (final IllegalStateException exception) {
                     sender.sendMessage(Component.text(exception.getMessage(), NamedTextColor.RED));
@@ -72,22 +77,28 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 player.getInventory().addItem(plugin.createDragonRadar());
-                sender.sendMessage(Component.text("The radar screen flickers with seven blips.", NamedTextColor.GREEN));
+                sender.sendMessage(Component.text("The Brothel Radar flickers and settles on " + hideoutService.enabledHideoutIds() + ".", NamedTextColor.GREEN));
                 return true;
             }
             case "hideout" -> {
                 if (args.length == 1) {
-                    sender.sendMessage(Component.text("Hideouts: " + hideoutService.hideouts().stream().map(Hideout::id).toList(), NamedTextColor.YELLOW));
+                    sender.sendMessage(Component.text(
+                        "Enabled hideouts: " + hideoutService.enabledHideoutIds() + " | active: " + hideoutService.activeHideoutId(),
+                        NamedTextColor.YELLOW
+                    ));
                     return true;
                 }
                 if ("random".equalsIgnoreCase(args[1])) {
                     hideoutService.chooseRandomActiveHideout();
-                    sender.sendMessage(Component.text("Active hideout randomized.", NamedTextColor.GREEN));
+                    sender.sendMessage(Component.text("Active hideout randomized to " + hideoutService.activeHideoutId() + ".", NamedTextColor.GREEN));
                     return true;
                 }
                 try {
                     hideoutService.setActiveHideoutById(args[1]);
-                    sender.sendMessage(Component.text("Active hideout set to " + args[1] + ".", NamedTextColor.GREEN));
+                    sender.sendMessage(Component.text(
+                        "Active hideout set to " + hideoutService.activeHideoutId() + " (" + hideoutService.activeHideoutName() + ").",
+                        NamedTextColor.GREEN
+                    ));
                 } catch (final IllegalArgumentException exception) {
                     sender.sendMessage(Component.text(exception.getMessage(), NamedTextColor.RED));
                 }

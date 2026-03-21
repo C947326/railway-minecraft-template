@@ -98,6 +98,20 @@ final class HideoutService {
         return active == null ? null : active.toLocation(plugin);
     }
 
+    String activeHideoutId() {
+        final Hideout active = activeHideout();
+        return active == null ? null : active.id();
+    }
+
+    String activeHideoutName() {
+        final Hideout active = activeHideout();
+        return active == null ? null : active.name();
+    }
+
+    List<String> enabledHideoutIds() {
+        return hideouts.stream().map(Hideout::id).toList();
+    }
+
     List<HideoutSignal> nearestSignalsFor(final Player player, final int limit) {
         final Location playerLocation = player.getLocation();
         return hideouts.stream()
