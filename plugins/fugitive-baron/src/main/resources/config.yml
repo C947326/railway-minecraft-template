@@ -27,7 +27,7 @@ encounter:
   radar-name: "Brothel Radar"
   radar-lore:
     - "Seven hideouts. One fugitive."
-    - "It finds hideouts, vice, and regrettable investments."
+    - "It finds vice dens, gossip, and regrettable investments."
   radar-update-ticks: 60
   radar-max-drift-degrees: 18.0
   radar-ping-radius: 40.0
@@ -38,9 +38,9 @@ hideouts:
     enabled: true
     name: "Antenna Nest"
     world: "world"
-    x: 128.0
-    y: 76.0
-    z: -212.0
+    x: 612.0
+    y: 88.0
+    z: -438.0
     mood: "absurd technical ritual"
     clue: "Fresh copper polish and humming redstone say someone was here recently."
     ambient-line: "If you cannot hear the noise in the sky, you are not sick enough yet."
@@ -58,17 +58,17 @@ hideouts:
     ambient-line: "Coastlines are for exits, not holidays."
     trust-intel: "John glances toward the tide: \"When the beach goes quiet, the jungle is next.\""
     ambient-sound-id: "baron.hideout.hideout_beach_cache"
-  cave_server_room:
-    enabled: false
-    name: "Cave Server Room"
+  crorgans_nest:
+    enabled: true
+    name: "Crorgan's Nest"
     world: "world"
-    x: 512.0
-    y: 42.0
-    z: 96.0
-    mood: "hidden infrastructure"
-    clue: "A lectern page says: 'root access revoked after the lantern failure.'"
-    ambient-line: "Trust no machine you did not personally offend."
-    trust-intel: "John lowers his voice: \"The cave keeps records. Records are both useful and unforgivable.\""
+    x: 742.0
+    y: 72.0
+    z: -126.0
+    mood: "private arrogance under stone"
+    clue: "A scratched note says: 'If the ridge is lost, go to Crorgan's Nest and bar the door.'"
+    ambient-line: "Every fortress becomes a diary if you leave enough paper in it."
+    trust-intel: "John glances around the stonework: \"Crorgan understood one thing: paranoia should have storage.\""
     ambient-sound-id: "baron.hideout.hideout_cave_server_room"
   jungle_bunker:
     enabled: false

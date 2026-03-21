@@ -44,6 +44,7 @@ final class FugitiveBaronController {
     private double fleeSpeed;
     private double attackedFleeSpeed;
     private long interactCooldownTicks;
+    private long panicFleeTicks;
     private long attackedFleeTicks;
     private String displayName;
 
@@ -52,6 +53,7 @@ final class FugitiveBaronController {
     private UUID currentTargetId;
     private long lastInteractionTick;
     private long fleeUntilTick;
+    private long fleeRelocateAfterTick;
 
     FugitiveBaronController(
         final FugitiveBaronPlugin plugin,
@@ -82,6 +84,7 @@ final class FugitiveBaronController {
         this.fleeSpeed = config.getDouble("encounter.flee-speed", 0.34D);
         this.attackedFleeSpeed = config.getDouble("encounter.attacked-flee-speed", Math.max(fleeSpeed, 0.8D));
         this.interactCooldownTicks = config.getLong("encounter.interact-cooldown-ticks", 40L);
+        this.panicFleeTicks = config.getLong("encounter.panic-flee-ticks", 120L);
         this.attackedFleeTicks = config.getLong("encounter.attacked-flee-ticks", 200L);
         this.displayName = config.getString("encounter.display-name", "John");
         if (hasCitizensSupport()) {
@@ -124,6 +127,7 @@ final class FugitiveBaronController {
                     this.currentTargetId = null;
                     this.lastInteractionTick = 0L;
                     this.fleeUntilTick = 0L;
+                    this.fleeRelocateAfterTick = 0L;
                     plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(spawnLocation));
                     return citizensBaron;
                 }
@@ -164,6 +168,7 @@ final class FugitiveBaronController {
         this.currentTargetId = null;
         this.lastInteractionTick = 0L;
         this.fleeUntilTick = 0L;
+        this.fleeRelocateAfterTick = 0L;
         plugin.debugLog("Spawned Baron at " + formatLocation(spawnLocation));
 
         return livingEntity;
@@ -176,6 +181,9 @@ final class FugitiveBaronController {
         }
         final String hideoutId = hideoutService.activeHideoutId();
         if ("antenna_nest".equalsIgnoreCase(hideoutId)) {
+            return spawnBaron(location.clone().add(0.0D, 0.0D, 6.0D));
+        }
+        if ("crorgans_nest".equalsIgnoreCase(hideoutId)) {
             return spawnBaron(location.clone().add(0.0D, 0.0D, 3.0D));
         }
         return spawnBaron(location);
@@ -187,6 +195,7 @@ final class FugitiveBaronController {
         this.currentTargetId = null;
         this.state = BaronState.IDLE;
         this.fleeUntilTick = 0L;
+        this.fleeRelocateAfterTick = 0L;
     }
 
     void tick(final long currentTick) {
@@ -196,11 +205,19 @@ final class FugitiveBaronController {
             this.currentTargetId = null;
             this.state = BaronState.IDLE;
             this.fleeUntilTick = 0L;
+            this.fleeRelocateAfterTick = 0L;
             return;
         }
 
         final Player forcedFleeTarget = fleeingAggressor(baron.getWorld(), currentTick);
         if (forcedFleeTarget != null) {
+            if (shouldRelocateAfterEscape(baron, forcedFleeTarget, currentTick)) {
+                this.currentTargetId = null;
+                this.fleeUntilTick = 0L;
+                this.fleeRelocateAfterTick = 0L;
+                plugin.escapeBaronHunt(forcedFleeTarget);
+                return;
+            }
             currentTargetId = forcedFleeTarget.getUniqueId();
             setState(BaronState.FLEE, forcedFleeTarget, currentTick);
             flee(baron, forcedFleeTarget, attackedFleeSpeed);
@@ -235,15 +252,14 @@ final class FugitiveBaronController {
                 face(baron, target.getLocation());
                 zeroHorizontalVelocity(baron);
             } else {
-                setState(BaronState.FLEE, target, currentTick);
-                flee(baron, target, fleeSpeed);
+                triggerPanicFlee(baron, target, currentTick, fleeSpeed);
             }
             return;
         }
 
         if (distance <= suspicionRadius) {
             setState(BaronState.SUSPICIOUS, target, currentTick);
-            retreat(baron, target, suspiciousSpeed);
+            retreat(baron, target, suspiciousSpeed, 12.0D);
             return;
         }
 
@@ -275,8 +291,7 @@ final class FugitiveBaronController {
 
         if (!trusted) {
             plugin.debugLog("Rejected interaction from " + player.getName() + " without valid recognition item.");
-            setState(BaronState.FLEE, player, currentTick);
-            flee(baron, player, fleeSpeed);
+            triggerPanicFlee(baron, player, currentTick, fleeSpeed);
             dialogueService.forceLine(player, BaronState.FLEE, currentTick);
             lastInteractionTick = currentTick;
             return;
@@ -304,9 +319,18 @@ final class FugitiveBaronController {
         plugin.debugLog("Baron damaged by " + attacker.getName() + "; triggering escape.");
         this.currentTargetId = attacker.getUniqueId();
         this.fleeUntilTick = currentTick + attackedFleeTicks;
+        this.fleeRelocateAfterTick = currentTick + 40L;
         setState(BaronState.FLEE, attacker, currentTick);
         dialogueService.forceLine(attacker, BaronState.FLEE, currentTick);
         flee(baron, attacker, attackedFleeSpeed);
+    }
+
+    private void triggerPanicFlee(final LivingEntity baron, final Player player, final long currentTick, final double speed) {
+        this.currentTargetId = player.getUniqueId();
+        this.fleeUntilTick = Math.max(this.fleeUntilTick, currentTick + panicFleeTicks);
+        this.fleeRelocateAfterTick = Math.max(this.fleeRelocateAfterTick, currentTick + 30L);
+        setState(BaronState.FLEE, player, currentTick);
+        flee(baron, player, speed);
     }
 
     private EntityType parseEntityType() {
@@ -439,7 +463,7 @@ final class FugitiveBaronController {
         baron.teleport(current);
     }
 
-    private void retreat(final LivingEntity baron, final Player player, final double speed) {
+    private void retreat(final LivingEntity baron, final Player player, final double speed, final double travelDistance) {
         face(baron, player.getLocation());
         final Vector away = escapeVector(baron, player);
         away.setY(0);
@@ -447,7 +471,7 @@ final class FugitiveBaronController {
             return;
         }
 
-        final Location destination = baron.getLocation().clone().add(away.normalize().multiply(14.0D));
+        final Location destination = baron.getLocation().clone().add(away.normalize().multiply(travelDistance));
         if (isCitizensBaron(baron)) {
             try {
                 citizensSupport.navigateTo(destination, speedModifier(speed));
@@ -465,7 +489,7 @@ final class FugitiveBaronController {
     }
 
     private void flee(final LivingEntity baron, final Player player, final double speed) {
-        retreat(baron, player, speed);
+        retreat(baron, player, speed, 28.0D);
         baron.getWorld().spawnParticle(Particle.CLOUD, baron.getLocation().add(0, 0.6, 0), 8, 0.2, 0.2, 0.2, 0.01);
     }
 
@@ -584,6 +608,20 @@ final class FugitiveBaronController {
             return null;
         }
         return player;
+    }
+
+    private boolean shouldRelocateAfterEscape(final LivingEntity baron, final Player aggressor, final long currentTick) {
+        if (currentTick < fleeRelocateAfterTick) {
+            return false;
+        }
+        if (aggressor.getWorld() != baron.getWorld()) {
+            return true;
+        }
+        final double distanceSquared = aggressor.getLocation().distanceSquared(baron.getLocation());
+        if (!aggressor.hasLineOfSight(baron)) {
+            return true;
+        }
+        return distanceSquared > Math.pow(fleeResetRadius + 8.0D, 2);
     }
 
     private boolean hasCitizensSupport() {

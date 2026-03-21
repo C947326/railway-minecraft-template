@@ -232,16 +232,33 @@ final class WorldSeedService {
 
     Component seedAll(final boolean spawnBaron) {
         final Component antennaResult = seedAntennaNest(spawnBaron);
+        final Component crorganResult = seedCrorgansNest();
         final Component boardsResult = seedBoards();
         final Component viceResult = seedViceSites();
         return Component.text()
             .append(Component.text("Seed all complete. ", NamedTextColor.GREEN))
             .append(antennaResult)
             .append(Component.text(" ", NamedTextColor.GRAY))
+            .append(crorganResult)
+            .append(Component.text(" ", NamedTextColor.GRAY))
             .append(boardsResult)
             .append(Component.text(" ", NamedTextColor.GRAY))
             .append(viceResult)
             .build();
+    }
+
+    Component seedCrorgansNest() {
+        final Location configured = hideoutService.locationForId("crorgans_nest");
+        if (configured == null || configured.getWorld() == null) {
+            return Component.text("Crorgan's Nest is not enabled or has no valid world.", NamedTextColor.YELLOW);
+        }
+        final Location base = configured.clone();
+        base.setX(Math.floor(base.getX()));
+        base.setZ(Math.floor(base.getZ()));
+        base.setY(configured.getWorld().getHighestBlockYAt(base) + 1);
+        seedCrorgansNest(base);
+        plugin.debugLog("Seeded Crorgan's Nest at " + format(base));
+        return Component.text("Seeded Crorgan's Nest at " + format(base) + ".", NamedTextColor.GREEN);
     }
 
     Component fullResetAndSeed(final boolean spawnBaron) {
@@ -293,12 +310,7 @@ final class WorldSeedService {
                 .map(site -> toRadarSignal(player.getLocation(), site))
                 .toList();
         }
-
-        return hideoutService.nearestSignalsFor(player, limit).stream()
-            .map(signal -> new RadarSignal(signal.hideout().id(), signal.hideout().name(), "hideout",
-                hideoutService.locationForId(signal.hideout().id()), signal.distanceSquared(), signal.cardinal(),
-                signal.hideout().clue()))
-            .toList();
+        return List.of();
     }
 
     Component radarSummaryFor(final Player player) {
@@ -424,6 +436,44 @@ final class WorldSeedService {
         );
     }
 
+    Component advanceHuntAfterEscape(final Player player) {
+        final int maxCycles = plugin.getConfig().getInt("encounter.max-hunt-cycles", DEFAULT_MAX_HUNT_CYCLES);
+        final int nextCycle = seedStateRepository.huntCycle() + 1;
+
+        if (nextCycle >= maxCycles) {
+            controller.despawnBaron();
+            seedStateRepository.resetAllViceSiteDiscoveries();
+            seedStateRepository.setHuntCycle(nextCycle);
+            plugin.debugLog("Baron escaped the hunt entirely at cycle " + nextCycle + ".");
+            return Component.text(
+                "John slips clean out of sight. By the time you crest the ridge, he has become folklore again.",
+                NamedTextColor.GOLD
+            );
+        }
+
+        if (!hideoutService.advanceToNextHideout()) {
+            controller.despawnBaron();
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
+            seedStateRepository.resetAllViceSiteDiscoveries();
+            seedStateRepository.setHuntCycle(nextCycle);
+            plugin.debugLog("John escaped line of sight, but only one hideout is enabled.");
+            return Component.text(
+                "John breaks line of sight and loops back into the same territory. The vice trail resets.",
+                NamedTextColor.YELLOW
+            );
+        }
+
+        controller.despawnBaron();
+        seedStateRepository.resetAllViceSiteDiscoveries();
+        seedStateRepository.setHuntCycle(nextCycle);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
+        plugin.debugLog("John escaped to hideout " + hideoutService.activeHideoutId() + " after losing line of sight.");
+        return Component.text(
+            "John breaks line of sight and bolts for " + hideoutService.activeHideoutName() + ". The Brothel Radar goes dirty again.",
+            NamedTextColor.GOLD
+        );
+    }
+
     Component resetRadarProgress(final Player player) {
         final int previousCount = seedStateRepository.discoveredViceSites(player.getUniqueId()).size();
         seedStateRepository.resetViceSiteDiscoveries(player.getUniqueId());
@@ -483,7 +533,7 @@ final class WorldSeedService {
         return switch (hideoutId) {
             case "antenna_nest" -> "high ground, copper, and a ridge cut by wind";
             case "beach_cache" -> "salt air, sand, and a line of open water";
-            case "cave_server_room" -> "stone below ground and machine-noise in the dark";
+            case "crorgans_nest" -> "stone rooms, hidden corners, and a nest built for someone too pleased with himself";
             case "jungle_bunker" -> "thick leaves, wet heat, and something overgrown";
             case "ruined_dock" -> "rotted timber, water, and an old departure point";
             case "swamp_shack" -> "mud, reeds, and air that feels too warm to trust";
@@ -496,7 +546,7 @@ final class WorldSeedService {
         return switch (hideoutId) {
             case "antenna_nest" -> "copper rods and a rig pointed at the sky";
             case "beach_cache" -> "crates, a tide line, and somewhere to leave quickly";
-            case "cave_server_room" -> "a hidden room that treats redstone like infrastructure";
+            case "crorgans_nest" -> "a private nest, stone-lined and smug enough to call itself strategic";
             case "jungle_bunker" -> "camouflage, maps, and too much confidence in leaves";
             case "ruined_dock" -> "a ruined pier and one shipment that never left";
             case "swamp_shack" -> "warm lamp oil and boots that sink on the way out";
@@ -597,6 +647,90 @@ final class WorldSeedService {
         painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 10), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 8, baseY + 1, baseZ + 5), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 0, baseY + 1, baseZ + 5), Material.LANTERN);
+    }
+
+    private void seedCrorgansNest(final Location location) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return;
+        }
+        final int baseX = location.getBlockX() - 4;
+        final int baseZ = location.getBlockZ() - 4;
+        final int baseY = location.getBlockY();
+
+        for (int x = -1; x <= 9; x++) {
+            for (int z = -1; z <= 9; z++) {
+                for (int y = 1; y <= 5; y++) {
+                    painter.set(world.getBlockAt(baseX + x, baseY + y, baseZ + z), Material.AIR);
+                }
+            }
+        }
+
+        painter.fill(world.getBlockAt(baseX, baseY, baseZ), 9, 9, Material.STONE_BRICKS);
+        for (int x = 0; x < 9; x++) {
+            for (int z = 0; z < 9; z++) {
+                final boolean edge = x == 0 || x == 8 || z == 0 || z == 8;
+                if (!edge) {
+                    continue;
+                }
+                for (int y = 1; y <= 3; y++) {
+                    final Material wallMaterial = (x == 0 || x == 8) && (z == 0 || z == 8)
+                        ? Material.POLISHED_DEEPSLATE
+                        : Material.DEEPSLATE_BRICKS;
+                    painter.set(world.getBlockAt(baseX + x, baseY + y, baseZ + z), wallMaterial);
+                }
+            }
+        }
+
+        for (int y = 1; y <= 2; y++) {
+            painter.set(world.getBlockAt(baseX + 4, baseY + y, baseZ + 8), Material.AIR);
+        }
+        for (int x = 0; x < 9; x++) {
+            for (int z = 0; z < 9; z++) {
+                painter.set(world.getBlockAt(baseX + x, baseY + 4, baseZ + z), Material.DARK_OAK_SLAB);
+            }
+        }
+
+        painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 2), Material.CARTOGRAPHY_TABLE);
+        placeLectern(world.getBlockAt(baseX + 3, baseY + 1, baseZ + 2), WorldContentLibrary.softwareBook());
+        placeBarrel(world.getBlockAt(baseX + 6, baseY + 1, baseZ + 2), "Crorgan's Ledger", List.of(
+            WorldContentLibrary.listenerNumbersPaper(),
+            WorldContentLibrary.sponsorDraftPaper(),
+            new ItemStack(Material.EMERALD, 6),
+            new ItemStack(Material.REDSTONE, 14)
+        ));
+        placeChest(world.getBlockAt(baseX + 6, baseY + 1, baseZ + 6), "Crorgan's Cache", List.of(
+            WorldContentLibrary.repaymentCertificate(),
+            enchantedHelmet("Strategic Helmet"),
+            enchantedBoots("Stairwell Boots"),
+            new ItemStack(Material.GUNPOWDER, 12),
+            new ItemStack(Material.COOKED_BEEF, 5)
+        ));
+        painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 6), Material.RED_BED);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 6), Material.DARK_OAK_STAIRS);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 2, baseZ + 6), Material.LANTERN);
+        painter.set(world.getBlockAt(baseX + 4, baseY + 1, baseZ + 7), Material.DARK_OAK_TRAPDOOR);
+
+        seedCrorgansEscapeRoute(world, baseX, baseY, baseZ);
+    }
+
+    private void seedCrorgansEscapeRoute(final World world, final int baseX, final int baseY, final int baseZ) {
+        final int centerX = baseX + 4;
+        final int startZ = baseZ + 9;
+
+        for (int step = 0; step < 8; step++) {
+            final int z = startZ + step;
+            final int groundY = world.getHighestBlockYAt(centerX, z);
+            final int pathY = Math.min(baseY - 1, groundY);
+
+            for (int width = -1; width <= 1; width++) {
+                final int x = centerX + width;
+                for (int clearY = pathY + 1; clearY <= pathY + 3; clearY++) {
+                    painter.set(world.getBlockAt(x, clearY, z), Material.AIR);
+                }
+                painter.set(world.getBlockAt(x, pathY, z), step < 3 ? Material.COBBLED_DEEPSLATE_STAIRS : Material.COBBLED_DEEPSLATE);
+            }
+        }
     }
 
     private void seedAntennaEscapeRoute(final World world, final int baseX, final int baseY, final int baseZ) {

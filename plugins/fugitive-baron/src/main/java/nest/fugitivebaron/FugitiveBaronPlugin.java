@@ -114,6 +114,16 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         }
     }
 
+    void escapeBaronHunt(final Player player) {
+        final Component result = worldSeedService.advanceHuntAfterEscape(player);
+        if (result != null && player != null) {
+            player.sendMessage(result);
+        }
+        for (final Player online : getServer().getOnlinePlayers()) {
+            radarService.refreshRadarFor(online);
+        }
+    }
+
     int resetAllPlayerRadars() {
         return radarService.resetRadarsForOnlinePlayers();
     }
