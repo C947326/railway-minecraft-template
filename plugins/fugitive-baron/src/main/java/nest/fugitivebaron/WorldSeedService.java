@@ -157,6 +157,11 @@ final class WorldSeedService {
     }
 
     private Location chooseSeedLocation(final Hideout hideout, final Location configured) {
+        final Location persisted = "antenna_nest".equalsIgnoreCase(hideout.id()) ? seedStateRepository.antennaLocation(plugin) : null;
+        if (persisted != null && persisted.getWorld() != null) {
+            return persisted.clone();
+        }
+
         final Location candidate = configured.clone();
         candidate.setX(Math.floor(candidate.getX()));
         candidate.setZ(Math.floor(candidate.getZ()));
@@ -355,8 +360,11 @@ final class WorldSeedService {
     }
 
     boolean isViceStaff(final Entity entity) {
-        if (entity == null || !entity.getScoreboardTags().contains(VICE_STAFF_TAG)) {
+        if (entity == null) {
             return false;
+        }
+        if (!entity.getScoreboardTags().contains(VICE_STAFF_TAG)) {
+            return looksLikeViceStaff(entity);
         }
         if (hasCitizensViceStaffSupport()) {
             try {
@@ -564,6 +572,8 @@ final class WorldSeedService {
         final int baseZ = location.getBlockZ() - 5;
         final int baseY = location.getBlockY();
 
+        prepareAntennaFootprint(world, baseX, baseY, baseZ);
+
         final Block floorCorner = world.getBlockAt(baseX, baseY, baseZ);
         painter.fill(floorCorner, 9, 11, Material.DARK_OAK_PLANKS);
 
@@ -647,6 +657,16 @@ final class WorldSeedService {
         painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 10), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 8, baseY + 1, baseZ + 5), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 0, baseY + 1, baseZ + 5), Material.LANTERN);
+    }
+
+    private void prepareAntennaFootprint(final World world, final int baseX, final int baseY, final int baseZ) {
+        for (int x = -1; x <= 9; x++) {
+            for (int z = -1; z <= 15; z++) {
+                for (int y = 1; y <= 9; y++) {
+                    painter.set(world.getBlockAt(baseX + x, baseY + y, baseZ + z), Material.AIR);
+                }
+            }
+        }
     }
 
     private void seedCrorgansNest(final Location location) {
@@ -1175,6 +1195,20 @@ final class WorldSeedService {
             .filter(site -> site.location().getWorld().equals(location.getWorld()))
             .min(Comparator.comparingDouble(site -> site.location().distanceSquared(location)))
             .orElse(null);
+    }
+
+    private boolean looksLikeViceStaff(final Entity entity) {
+        if (!(entity instanceof org.bukkit.entity.LivingEntity livingEntity)) {
+            return false;
+        }
+        if (!(entity instanceof Villager || entity.getType() == org.bukkit.entity.EntityType.PLAYER)) {
+            return false;
+        }
+        if (livingEntity.customName() == null && (entity.getName() == null || entity.getName().isBlank())) {
+            return false;
+        }
+        final ViceSite nearest = nearestViceSite(entity.getLocation());
+        return nearest != null && nearest.location().distanceSquared(entity.getLocation()) <= 36.0D;
     }
 
     private WorldContentLibrary.ViceVariant viceVariant(final String id) {

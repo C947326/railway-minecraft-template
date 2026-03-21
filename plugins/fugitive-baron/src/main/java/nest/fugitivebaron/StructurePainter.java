@@ -23,6 +23,16 @@ final class StructurePainter {
         }
     }
 
+    void clearVolume(final Block corner, final int width, final int height, final int depth) {
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    set(corner.getRelative(x, y, z), Material.AIR);
+                }
+            }
+        }
+    }
+
     Block topSolidBlock(final Block block) {
         Block cursor = block;
         while (cursor.getY() > cursor.getWorld().getMinHeight() && cursor.getType().isAir()) {
