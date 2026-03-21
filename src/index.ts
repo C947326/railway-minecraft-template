@@ -357,6 +357,13 @@ const getControlPort = () => {
 	return Number.isNaN(port) ? 3000 : port;
 };
 
+const getPublicServerAddress = () => {
+	if (env.RAILWAY_TCP_PROXY_DOMAIN && env.RAILWAY_TCP_PROXY_PORT) {
+		return `${env.RAILWAY_TCP_PROXY_DOMAIN}:${env.RAILWAY_TCP_PROXY_PORT}`;
+	}
+	return null;
+};
+
 const getStatusCacheMs = () =>
 	getPositiveInt(env.MC_STATUS_CACHE_MS, MC_STATUS_CACHE_MS, 250);
 
@@ -402,10 +409,7 @@ type PowerStateSnapshot = {
 const createBaseStatusSnapshot = (): StatusSnapshot => ({
 	host: env.MC_SERVER_HOST,
 	port: getMCServerPort(),
-	publicAddress:
-		env.RAILWAY_TCP_PROXY_DOMAIN && env.RAILWAY_TCP_PROXY_PORT
-			? `${env.RAILWAY_TCP_PROXY_DOMAIN}:${env.RAILWAY_TCP_PROXY_PORT}`
-			: null,
+	publicAddress: getPublicServerAddress(),
 	motd: null,
 	version: null,
 	latency: null,

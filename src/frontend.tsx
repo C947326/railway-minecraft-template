@@ -311,6 +311,9 @@ function App() {
 	const isServerRunning = powerState.status === "running";
 	const isServerStarting = powerState.status === "starting";
 	const isServerStopping = powerState.status === "stopping";
+	const addressDisplay =
+		serverStatus?.publicAddress ??
+		(isServerRunning ? "No Railway TCP proxy configured" : "—");
 	const canStartServer =
 		powerState.pid === null &&
 		(powerState.status === "stopped" || powerState.status === "error");
@@ -1388,7 +1391,7 @@ function App() {
 													Address
 												</div>
 												<div className="mt-1 truncate text-sm text-foreground/95">
-													{serverStatus?.publicAddress ?? "—"}
+													{addressDisplay}
 												</div>
 											</div>
 

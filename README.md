@@ -93,6 +93,7 @@ On startup, `/app/docker/start.sh` computes the pack SHA-1 and exports:
 
 - `RESOURCE_PACK`
 - `RESOURCE_PACK_SHA1`
+- `RESOURCE_PACK_ID`
 - `RESOURCE_PACK_ENFORCE`
 
 The Bun app serves the zip at:

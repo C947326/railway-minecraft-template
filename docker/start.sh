@@ -60,8 +60,11 @@ configure_resource_pack() {
   fi
 
   if [[ -n "${resource_pack_sha1}" ]]; then
+    local resource_pack_id
+    resource_pack_id="${resource_pack_sha1:0:8}-${resource_pack_sha1:8:4}-${resource_pack_sha1:12:4}-${resource_pack_sha1:16:4}-${resource_pack_sha1:20:12}"
     export RESOURCE_PACK="${resource_pack_url}"
     export RESOURCE_PACK_SHA1="${resource_pack_sha1}"
+    export RESOURCE_PACK_ID="${RESOURCE_PACK_ID:-${resource_pack_id}}"
     export RESOURCE_PACK_ENFORCE="${RESOURCE_PACK_ENFORCE:-TRUE}"
   fi
 }
