@@ -674,25 +674,29 @@ final class WorldSeedService {
 
     private void placeBarrel(final Block block, final String name, final List<ItemStack> items) {
         block.setType(Material.BARREL, false);
-        if (block.getState() instanceof Barrel barrel) {
-            barrel.setCustomName(name);
-            barrel.update(true, true);
-            if (block.getState() instanceof Barrel placedBarrel) {
-                populateInventory(placedBarrel.getInventory(), items);
-                placedBarrel.update(true, true);
-            }
-        }
+        fillBarrel(block, name, items);
+        plugin.getServer().getScheduler().runTask(plugin, () -> fillBarrel(block, name, items));
     }
 
     private void placeChest(final Block block, final String name, final List<ItemStack> items) {
         block.setType(Material.CHEST, false);
+        fillChest(block, name, items);
+        plugin.getServer().getScheduler().runTask(plugin, () -> fillChest(block, name, items));
+    }
+
+    private void fillBarrel(final Block block, final String name, final List<ItemStack> items) {
+        if (block.getState() instanceof Barrel barrel) {
+            barrel.setCustomName(name);
+            populateInventory(barrel.getInventory(), items);
+            barrel.update(true, true);
+        }
+    }
+
+    private void fillChest(final Block block, final String name, final List<ItemStack> items) {
         if (block.getState() instanceof Chest chest) {
             chest.setCustomName(name);
+            populateInventory(chest.getBlockInventory(), items);
             chest.update(true, true);
-            if (block.getState() instanceof Chest placedChest) {
-                populateInventory(placedChest.getBlockInventory(), items);
-                placedChest.update(true, true);
-            }
         }
     }
 
