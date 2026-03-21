@@ -1118,12 +1118,9 @@ final class WorldSeedService {
 
     private void fillLectern(final Block block, final ItemStack book) {
         if (block.getState() instanceof Lectern lectern) {
+            lectern.setBook(book.clone());
             lectern.update(true, true);
-            if (block.getState() instanceof Lectern placedLectern) {
-                placedLectern.getInventory().setBook(book.clone());
-                placedLectern.update(true, true);
-                plugin.debugLog("Filled lectern with '" + bookLabel(book) + "' at " + format(block.getLocation()));
-            }
+            plugin.debugLog("Filled lectern with '" + bookLabel(book) + "' at " + format(block.getLocation()));
         }
     }
 
