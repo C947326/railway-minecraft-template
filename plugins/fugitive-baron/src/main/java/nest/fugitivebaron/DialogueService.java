@@ -88,7 +88,6 @@ final class DialogueService {
     private void deliverLine(final Player player, final DialogueLine line) {
         deliverSubtitle(player, SPEAKER, line.text());
         playSound(player, line.soundId());
-        plugin.debugLog("Delivered line to " + player.getName() + ": " + line.soundId() + " :: " + line.text());
     }
 
     private void playSound(final Player player, final String soundId) {
@@ -96,6 +95,5 @@ final class DialogueService {
             return;
         }
         player.playSound(player.getLocation(), soundId, SoundCategory.MASTER, voiceVolume, voicePitch);
-        plugin.debugLog("Played sound " + soundId + " for " + player.getName());
     }
 }

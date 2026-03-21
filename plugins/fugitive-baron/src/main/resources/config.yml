@@ -19,7 +19,7 @@ encounter:
   play-voice-audio: true
   voice-volume: 1.0
   voice-pitch: 1.0
-  debug-logging: true
+  debug-logging: false
   require-named-powder: false
   powder-name: "Suspicious White Powder"
   active-hideout-index: 0
