@@ -296,6 +296,7 @@ final class FugitiveBaronController {
             currentTick
         );
         lastInteractionTick = currentTick;
+        plugin.advanceBaronHunt(player);
     }
 
     void handleDamage(final Entity entity, final Player attacker, final long currentTick) {

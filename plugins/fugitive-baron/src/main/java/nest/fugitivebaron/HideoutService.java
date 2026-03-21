@@ -149,6 +149,14 @@ final class HideoutService {
         this.activeHideoutIndex = ThreadLocalRandom.current().nextInt(hideouts.size());
     }
 
+    boolean advanceToNextHideout() {
+        if (hideouts.size() <= 1) {
+            return false;
+        }
+        this.activeHideoutIndex = (activeHideoutIndex + 1) % hideouts.size();
+        return true;
+    }
+
     Component radarSummaryFor(final Player player) {
         final List<HideoutSignal> signals = nearestSignalsFor(player, 3);
         if (signals.isEmpty()) {

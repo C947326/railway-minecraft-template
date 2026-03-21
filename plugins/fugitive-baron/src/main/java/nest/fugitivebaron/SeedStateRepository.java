@@ -34,6 +34,15 @@ final class SeedStateRepository {
         return config.getInt("seed-version", SEED_VERSION);
     }
 
+    int huntCycle() {
+        return config.getInt("hunt.cycle", 0);
+    }
+
+    void setHuntCycle(final int cycle) {
+        config.set("hunt.cycle", cycle);
+        save();
+    }
+
     boolean isAntennaSeeded() {
         return config.getBoolean("antenna-nest.seeded", false);
     }

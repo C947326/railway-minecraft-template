@@ -26,6 +26,8 @@ import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
 
 final class WorldSeedService {
+    private static final int DEFAULT_MAX_HUNT_CYCLES = 3;
+
     private final FugitiveBaronPlugin plugin;
     private final HideoutService hideoutService;
     private final FugitiveBaronController controller;
@@ -62,6 +64,8 @@ final class WorldSeedService {
                 + seedStateRepository.rumorBoardCount()
                 + " vice="
                 + seedStateRepository.viceSiteCount()
+                + " cycle="
+                + seedStateRepository.huntCycle()
                 + " baron="
                 + baronStatus
                 + " version="
@@ -268,13 +272,55 @@ final class WorldSeedService {
         final ViceSite discovered = nearestUndiscoveredViceWithin(player, radius);
         if (discovered != null) {
             seedStateRepository.markViceSiteDiscovered(player.getUniqueId(), discovered.id());
+            final int discoveredCount = seedStateRepository.discoveredViceSites(player.getUniqueId()).size();
             plugin.debugLog("Player " + player.getName() + " discovered vice site " + discovered.id());
+            final String fragment = activeHideoutClueFragment(discoveredCount - 1);
             return Component.text(discovered.name() + ": ", NamedTextColor.LIGHT_PURPLE)
                 .append(Component.text(discovered.clue(), NamedTextColor.WHITE))
                 .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(discovered.nextLead(), NamedTextColor.YELLOW));
+                .append(Component.text(discovered.nextLead(), NamedTextColor.YELLOW))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(fragment, NamedTextColor.GREEN));
         }
         return hideoutService.nearbyHideoutIntelFor(player, radius);
+    }
+
+    Component advanceHuntAfterConfrontation(final Player player) {
+        final int maxCycles = plugin.getConfig().getInt("encounter.max-hunt-cycles", DEFAULT_MAX_HUNT_CYCLES);
+        final int nextCycle = seedStateRepository.huntCycle() + 1;
+
+        if (nextCycle >= maxCycles) {
+            controller.despawnBaron();
+            seedStateRepository.resetAllViceSiteDiscoveries();
+            seedStateRepository.setHuntCycle(nextCycle);
+            plugin.debugLog("Baron hunt completed at cycle " + nextCycle + ".");
+            return Component.text(
+                "John vanishes in a cloud of lies and smoke. The trail is spent; whatever money remained has become folklore.",
+                NamedTextColor.GOLD
+            );
+        }
+
+        if (!hideoutService.advanceToNextHideout()) {
+            controller.despawnBaron();
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
+            seedStateRepository.resetAllViceSiteDiscoveries();
+            seedStateRepository.setHuntCycle(nextCycle);
+            plugin.debugLog("Advanced Baron hunt to cycle " + nextCycle + " but only one hideout is enabled.");
+            return Component.text(
+                "John bolts, but your world only has one live hideout configured. The vice trail resets and the same scent returns.",
+                NamedTextColor.YELLOW
+            );
+        }
+
+        controller.despawnBaron();
+        seedStateRepository.resetAllViceSiteDiscoveries();
+        seedStateRepository.setHuntCycle(nextCycle);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> controller.spawnBaronAtActiveHideout(), 20L);
+        plugin.debugLog("Advanced Baron hunt to cycle " + nextCycle + " at hideout " + hideoutService.activeHideoutId() + ".");
+        return Component.text(
+            "John bolts for " + hideoutService.activeHideoutName() + ". The Brothel Radar goes dirty again; the vice trail has reset.",
+            NamedTextColor.GOLD
+        );
     }
 
     Component resetRadarProgress(final Player player) {
@@ -304,6 +350,58 @@ final class WorldSeedService {
             .filter(site -> site.location().distanceSquared(player.getLocation()) <= radius * radius)
             .min(Comparator.comparingDouble(site -> site.location().distanceSquared(player.getLocation())))
             .orElse(null);
+    }
+
+    private String activeHideoutClueFragment(final int index) {
+        final Hideout activeHideout = hideoutService.activeHideout();
+        final Location hideoutLocation = hideoutService.activeHideoutLocation();
+        if (activeHideout == null || hideoutLocation == null || hideoutLocation.getWorld() == null) {
+            return "The clues degrade into static.";
+        }
+
+        final Location spawn = hideoutLocation.getWorld().getSpawnLocation();
+        final double dx = hideoutLocation.getX() - spawn.getX();
+        final double dz = hideoutLocation.getZ() - spawn.getZ();
+        final int distance = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
+        final String direction = cardinal(dx, dz);
+
+        final List<String> fragments = List.of(
+            "Fragment " + (index + 1) + ": the next nest lies " + direction + " of spawn.",
+            "Fragment " + (index + 1) + ": they kept saying the run from spawn was about " + nearestHundred(distance) + " metres.",
+            "Fragment " + (index + 1) + ": the vice girls remembered " + biomeHint(activeHideout.id()) + ".",
+            "Fragment " + (index + 1) + ": the final whisper mentions " + landmarkHint(activeHideout.id()) + "."
+        );
+        return fragments.get(Math.floorMod(index, fragments.size()));
+    }
+
+    private int nearestHundred(final int value) {
+        return Math.max(100, Math.round(value / 100.0F) * 100);
+    }
+
+    private String biomeHint(final String hideoutId) {
+        return switch (hideoutId) {
+            case "antenna_nest" -> "high ground, copper, and a ridge cut by wind";
+            case "beach_cache" -> "salt air, sand, and a line of open water";
+            case "cave_server_room" -> "stone below ground and machine-noise in the dark";
+            case "jungle_bunker" -> "thick leaves, wet heat, and something overgrown";
+            case "ruined_dock" -> "rotted timber, water, and an old departure point";
+            case "swamp_shack" -> "mud, reeds, and air that feels too warm to trust";
+            case "watchpoint" -> "dry grass and a height advantage";
+            default -> "terrain that encourages a coward to feel strategic";
+        };
+    }
+
+    private String landmarkHint(final String hideoutId) {
+        return switch (hideoutId) {
+            case "antenna_nest" -> "copper rods and a rig pointed at the sky";
+            case "beach_cache" -> "crates, a tide line, and somewhere to leave quickly";
+            case "cave_server_room" -> "a hidden room that treats redstone like infrastructure";
+            case "jungle_bunker" -> "camouflage, maps, and too much confidence in leaves";
+            case "ruined_dock" -> "a ruined pier and one shipment that never left";
+            case "swamp_shack" -> "warm lamp oil and boots that sink on the way out";
+            case "watchpoint" -> "a spyglass stand watching too many routes";
+            default -> "the sort of landmark a fugitive mistakes for strategy";
+        };
     }
 
     private void seedAntenna(final Location location) {

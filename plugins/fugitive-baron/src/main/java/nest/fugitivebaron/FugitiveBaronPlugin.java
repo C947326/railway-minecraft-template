@@ -2,6 +2,7 @@ package nest.fugitivebaron;
 
 import java.util.Objects;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.PluginCommand;
@@ -95,6 +96,16 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
 
     void refreshRadar(final org.bukkit.entity.Player player) {
         radarService.refreshRadarFor(player);
+    }
+
+    void advanceBaronHunt(final Player player) {
+        final Component result = worldSeedService.advanceHuntAfterConfrontation(player);
+        if (result != null) {
+            player.sendMessage(result);
+        }
+        for (final Player online : getServer().getOnlinePlayers()) {
+            radarService.refreshRadarFor(online);
+        }
     }
 
     NamespacedKey baronKey() {
