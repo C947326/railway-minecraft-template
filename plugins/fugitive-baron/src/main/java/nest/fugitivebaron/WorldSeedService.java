@@ -35,6 +35,7 @@ import org.bukkit.potion.PotionType;
 
 final class WorldSeedService {
     private static final int DEFAULT_MAX_HUNT_CYCLES = 3;
+    private static final int REQUIRED_VICE_SITE_COUNT = 5;
     private static final String VICE_STAFF_TAG = "vice_staff";
     private static final String VICE_QUIP_TAG = "vice_quip";
     private static final long VICE_QUIP_LIFETIME_TICKS = 80L;
@@ -285,7 +286,7 @@ final class WorldSeedService {
         final Location spawn = world.getSpawnLocation();
         final List<WorldContentLibrary.ViceVariant> variants = WorldContentLibrary.viceVariants();
         int refreshed = 0;
-        for (int index = 0; index < 4; index++) {
+        for (int index = 0; index < REQUIRED_VICE_SITE_COUNT; index++) {
             final WorldContentLibrary.ViceVariant variant = variants.get(index % variants.size());
             final String id = "vice_" + (index + 1);
             final Location location = savedViceLocation(id, chooseViceLocation(spawn, index));
@@ -302,6 +303,10 @@ final class WorldSeedService {
     }
 
     List<RadarSignal> radarSignalsFor(final Player player, final int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+
         final List<ViceSite> undiscoveredVice = viceSites.stream()
             .filter(site -> site.location().getWorld() != null)
             .filter(site -> site.location().getWorld().equals(player.getWorld()))
@@ -310,18 +315,24 @@ final class WorldSeedService {
             .toList();
 
         if (!undiscoveredVice.isEmpty()) {
-            return undiscoveredVice.stream()
-                .limit(limit)
-                .map(site -> toRadarSignal(player.getLocation(), site))
-                .toList();
+            final List<RadarSignal> signals = new ArrayList<>();
+            for (final ViceSite site : undiscoveredVice) {
+                if (signals.size() >= limit) {
+                    break;
+                }
+                signals.add(toRadarSignal(player.getLocation(), site));
+            }
+            return signals;
         }
-        return List.of();
+
+        final RadarSignal activeHideout = activeHideoutRadarSignal(player);
+        return activeHideout == null ? List.of() : List.of(activeHideout);
     }
 
     Component radarSummaryFor(final Player player) {
         final List<RadarSignal> signals = radarSignalsFor(player, 3);
         if (signals.isEmpty()) {
-            return Component.text("The Brothel Radar hisses, but finds no Baron-network signals.", NamedTextColor.GRAY);
+            return Component.text("The Brothel Radar hisses, but finds no John-network signals.", NamedTextColor.GRAY);
         }
         Component line = Component.text("Brothel Radar picks up: ", NamedTextColor.AQUA);
         for (int index = 0; index < signals.size(); index++) {
@@ -338,8 +349,16 @@ final class WorldSeedService {
     }
 
     Location nextRadarTarget(final Player player) {
-        final List<RadarSignal> signals = radarSignalsFor(player, 1);
-        return signals.isEmpty() ? null : signals.getFirst().location();
+        final ViceSite nearestVice = nearestUndiscoveredVice(player);
+        if (nearestVice != null) {
+            return nearestVice.location().clone();
+        }
+
+        final Location activeHideout = hideoutService.activeHideoutLocation();
+        if (activeHideout == null || activeHideout.getWorld() == null || !activeHideout.getWorld().equals(player.getWorld())) {
+            return null;
+        }
+        return activeHideout.clone();
     }
 
     Component pingAndDiscover(final Player player, final double radius) {
@@ -356,7 +375,7 @@ final class WorldSeedService {
                 .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
                 .append(Component.text(fragment, NamedTextColor.GREEN));
         }
-        return hideoutService.nearbyHideoutIntelFor(player, radius);
+        return activeHideoutArrivalIntel(player, radius);
     }
 
     boolean isViceStaff(final Entity entity) {
@@ -511,6 +530,54 @@ final class WorldSeedService {
             .orElse(null);
     }
 
+    private ViceSite nearestUndiscoveredVice(final Player player) {
+        return viceSites.stream()
+            .filter(site -> site.location().getWorld() != null)
+            .filter(site -> site.location().getWorld().equals(player.getWorld()))
+            .filter(site -> !seedStateRepository.hasDiscoveredViceSite(player.getUniqueId(), site.id()))
+            .min(Comparator.comparingDouble(site -> site.location().distanceSquared(player.getLocation())))
+            .orElse(null);
+    }
+
+    private RadarSignal activeHideoutRadarSignal(final Player player) {
+        final Hideout activeHideout = hideoutService.activeHideout();
+        final Location activeHideoutLocation = hideoutService.activeHideoutLocation();
+        if (activeHideout == null || activeHideoutLocation == null || activeHideoutLocation.getWorld() == null) {
+            return null;
+        }
+        if (!activeHideoutLocation.getWorld().equals(player.getWorld())) {
+            return null;
+        }
+        final double dx = activeHideoutLocation.getX() - player.getLocation().getX();
+        final double dz = activeHideoutLocation.getZ() - player.getLocation().getZ();
+        return new RadarSignal(
+            activeHideout.name(),
+            activeHideoutLocation.clone(),
+            dx * dx + dz * dz,
+            cardinal(dx, dz)
+        );
+    }
+
+    private Component activeHideoutArrivalIntel(final Player player, final double radius) {
+        final Component line = hideoutService.nearbyHideoutIntelFor(player, radius);
+        if (line == null) {
+            return null;
+        }
+
+        final Hideout nearbyHideout = hideoutService.nearestHideoutWithin(player, radius);
+        final Hideout activeHideout = hideoutService.activeHideout();
+        if (nearbyHideout == null || activeHideout == null || !activeHideout.id().equalsIgnoreCase(nearbyHideout.id())) {
+            return line;
+        }
+
+        final Location johnLocation = controller.getBaronLocation();
+        if (controller.hasBaron() && johnLocation != null && johnLocation.getWorld() != null && johnLocation.getWorld().equals(player.getWorld())) {
+            return line.append(Component.text(" | John is close. Approach with the white powder ready.", NamedTextColor.GOLD));
+        }
+
+        return line.append(Component.text(" | The trail is real, but John is not here now.", NamedTextColor.YELLOW));
+    }
+
     private String activeHideoutClueFragment(final int index) {
         final Hideout activeHideout = hideoutService.activeHideout();
         final Location hideoutLocation = hideoutService.activeHideoutLocation();
@@ -528,7 +595,8 @@ final class WorldSeedService {
             "Fragment " + (index + 1) + ": the next nest lies " + direction + " of spawn.",
             "Fragment " + (index + 1) + ": they kept saying the run from spawn was about " + nearestHundred(distance) + " metres.",
             "Fragment " + (index + 1) + ": the vice girls remembered " + biomeHint(activeHideout.id()) + ".",
-            "Fragment " + (index + 1) + ": the final whisper mentions " + landmarkHint(activeHideout.id()) + "."
+            "Fragment " + (index + 1) + ": the whisper keeps returning to " + landmarkHint(activeHideout.id()) + ".",
+            "Fragment " + (index + 1) + ": five houses agree at last. John's first hideout is " + activeHideout.name() + "."
         );
         return fragments.get(Math.floorMod(index, fragments.size()));
     }
@@ -829,7 +897,7 @@ final class WorldSeedService {
         if (world == null) {
             return null;
         }
-        final double[] angles = {30.0D, 120.0D, 220.0D, 310.0D};
+        final double[] angles = {20.0D, 92.0D, 164.0D, 236.0D, 308.0D};
         final double distance = 120.0D + index * 45.0D;
         final double radians = Math.toRadians(angles[index % angles.length]);
         final int x = (int) Math.round(spawn.getX() + Math.cos(radians) * distance);

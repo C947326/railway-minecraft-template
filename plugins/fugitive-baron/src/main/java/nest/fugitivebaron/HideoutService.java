@@ -160,7 +160,7 @@ final class HideoutService {
     Component radarSummaryFor(final Player player) {
         final List<HideoutSignal> signals = nearestSignalsFor(player, 3);
         if (signals.isEmpty()) {
-            return Component.text("The Brothel Radar hisses, but finds no hideout signals.", NamedTextColor.GRAY);
+            return Component.text("The Brothel Radar hisses, but finds no John-network signals.", NamedTextColor.GRAY);
         }
 
         final Component prefix = Component.text("Brothel Radar picks up: ", NamedTextColor.AQUA);
@@ -199,7 +199,7 @@ final class HideoutService {
             .append(Component.text(hideout.clue(), NamedTextColor.WHITE));
 
         if (active) {
-            line = line.append(Component.text(" | Recent signal is strong here.", NamedTextColor.GREEN));
+            line = line.append(Component.text(" | The John-network signal terminates here.", NamedTextColor.GREEN));
         }
         return line;
     }
