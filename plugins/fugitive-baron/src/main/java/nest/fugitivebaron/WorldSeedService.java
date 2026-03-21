@@ -551,10 +551,13 @@ final class WorldSeedService {
         final double dx = activeHideoutLocation.getX() - player.getLocation().getX();
         final double dz = activeHideoutLocation.getZ() - player.getLocation().getZ();
         return new RadarSignal(
+            activeHideout.id(),
             activeHideout.name(),
+            "hideout",
             activeHideoutLocation.clone(),
             dx * dx + dz * dz,
-            cardinal(dx, dz)
+            cardinal(dx, dz),
+            activeHideout.clue()
         );
     }
 
