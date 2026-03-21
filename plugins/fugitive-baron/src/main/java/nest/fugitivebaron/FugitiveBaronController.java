@@ -16,9 +16,13 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.WanderingTrader;
+import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.Color;
+import org.bukkit.Material;
 import org.bukkit.util.Vector;
 
 final class FugitiveBaronController {
@@ -34,6 +38,7 @@ final class FugitiveBaronController {
     private double suspiciousSpeed;
     private double fleeSpeed;
     private long interactCooldownTicks;
+    private String displayName;
 
     private UUID baronId;
     private BaronState state = BaronState.IDLE;
@@ -61,6 +66,7 @@ final class FugitiveBaronController {
         this.suspiciousSpeed = config.getDouble("encounter.suspicious-speed", 0.14D);
         this.fleeSpeed = config.getDouble("encounter.flee-speed", 0.34D);
         this.interactCooldownTicks = config.getLong("encounter.interact-cooldown-ticks", 40L);
+        this.displayName = config.getString("encounter.display-name", "John");
     }
 
     boolean hasBaron() {
@@ -81,12 +87,14 @@ final class FugitiveBaronController {
         final PersistentDataContainer pdc = livingEntity.getPersistentDataContainer();
         pdc.set(plugin.baronKey(), PersistentDataType.BYTE, (byte) 1);
 
-        livingEntity.customName(Component.text("The Baron", NamedTextColor.GOLD));
+        livingEntity.customName(Component.text(displayName, NamedTextColor.GOLD));
         livingEntity.setCustomNameVisible(true);
         livingEntity.setPersistent(true);
         livingEntity.setRemoveWhenFarAway(false);
         livingEntity.setCanPickupItems(false);
         livingEntity.setCollidable(true);
+        livingEntity.setAI(true);
+        applyAppearance(livingEntity);
 
         if (livingEntity instanceof WanderingTrader trader) {
             trader.setAI(true);
@@ -136,6 +144,7 @@ final class FugitiveBaronController {
             setState(BaronState.IDLE, null, currentTick);
             if (baron instanceof Mob mob) {
                 mob.setTarget(null);
+                stopPathfinding(mob);
                 mob.setVelocity(new Vector(0, baron.getVelocity().getY(), 0));
             }
             return;
@@ -308,14 +317,21 @@ final class FugitiveBaronController {
 
     private void retreat(final LivingEntity baron, final Player player, final double speed) {
         face(baron, player.getLocation());
-        final Vector away = baron.getLocation().toVector().subtract(player.getLocation().toVector());
+        final Vector away = escapeVector(baron, player);
         away.setY(0);
         if (away.lengthSquared() <= 0.0001D) {
             return;
         }
 
-        away.normalize().multiply(speed).setY(baron.getVelocity().getY());
-        baron.setVelocity(away);
+        if (baron instanceof Mob mob) {
+            final Location destination = baron.getLocation().clone().add(away.normalize().multiply(8.0D));
+            destination.setY(baron.getLocation().getY());
+            tryMove(mob, destination, speed);
+        }
+
+        final Vector movement = away.normalize().multiply(speed);
+        movement.setY(baron.getVelocity().getY());
+        baron.setVelocity(movement);
     }
 
     private void flee(final LivingEntity baron, final Player player, final double speed) {
@@ -326,5 +342,58 @@ final class FugitiveBaronController {
     private void zeroHorizontalVelocity(final LivingEntity baron) {
         final Vector velocity = baron.getVelocity();
         baron.setVelocity(new Vector(0, velocity.getY(), 0));
+    }
+
+    private void applyAppearance(final LivingEntity baron) {
+        final EntityEquipment equipment = baron.getEquipment();
+        if (equipment == null) {
+            return;
+        }
+
+        equipment.setHelmet(null);
+        equipment.setChestplate(createOutfitPiece(Color.fromRGB(233, 229, 214), Material.LEATHER_CHESTPLATE));
+        equipment.setLeggings(createOutfitPiece(Color.fromRGB(244, 239, 226), Material.LEATHER_LEGGINGS));
+        equipment.setBoots(createOutfitPiece(Color.fromRGB(210, 198, 174), Material.LEATHER_BOOTS));
+        equipment.setHelmetDropChance(0.0F);
+        equipment.setChestplateDropChance(0.0F);
+        equipment.setLeggingsDropChance(0.0F);
+        equipment.setBootsDropChance(0.0F);
+    }
+
+    private ItemStack createOutfitPiece(final Color color, final Material armorType) {
+        final ItemStack item = new ItemStack(armorType);
+        if (!(item.getItemMeta() instanceof LeatherArmorMeta meta)) {
+            return item;
+        }
+
+        meta.setColor(color);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private Vector escapeVector(final LivingEntity baron, final Player player) {
+        final Vector away = baron.getLocation().toVector().subtract(player.getLocation().toVector());
+        if (away.lengthSquared() > 0.0001D) {
+            return away;
+        }
+        final Vector fallback = player.getLocation().getDirection().multiply(-1.0D);
+        fallback.setY(0);
+        return fallback;
+    }
+
+    private void tryMove(final Mob mob, final Location destination, final double speed) {
+        try {
+            mob.getPathfinder().moveTo(destination, speed);
+        } catch (final NoSuchMethodError ignored) {
+            plugin.debugLog("Pathfinder.moveTo unavailable; falling back to velocity only.");
+        }
+    }
+
+    private void stopPathfinding(final Mob mob) {
+        try {
+            mob.getPathfinder().stopPathfinding();
+        } catch (final NoSuchMethodError ignored) {
+            plugin.debugLog("Pathfinder.stopPathfinding unavailable; falling back to velocity only.");
+        }
     }
 }

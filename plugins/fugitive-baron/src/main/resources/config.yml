@@ -2,6 +2,7 @@ encounter:
   awareness-radius: 12.0
   suspicion-radius: 7.0
   trust-radius: 3.0
+  display-name: "John"
   flee-reset-radius: 16.0
   observe-speed: 0.08
   suspicious-speed: 0.14

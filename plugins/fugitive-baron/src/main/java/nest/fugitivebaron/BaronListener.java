@@ -2,6 +2,7 @@ package nest.fugitivebaron;
 
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -42,8 +43,9 @@ final class BaronListener implements Listener {
             return;
         }
         event.setCancelled(true);
-        if (event.getDamager() instanceof Player player) {
-            controller.handleDamage(event.getEntity(), player, plugin.currentTick());
+        final Player attacker = resolveAttacker(event.getDamager());
+        if (attacker != null) {
+            controller.handleDamage(event.getEntity(), attacker, plugin.currentTick());
         }
     }
 
@@ -64,5 +66,15 @@ final class BaronListener implements Listener {
         }
 
         radarService.pingNearestSignals(event.getPlayer());
+    }
+
+    private Player resolveAttacker(final Entity damager) {
+        if (damager instanceof Player player) {
+            return player;
+        }
+        if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player player) {
+            return player;
+        }
+        return null;
     }
 }
