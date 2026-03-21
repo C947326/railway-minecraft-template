@@ -35,6 +35,8 @@ install_bundled_plugins() {
     cp -f "${plugin_path}" "${managed_plugins_dir}/${plugin_name}"
   done
   shopt -u nullglob
+
+  chown -R "${run_uid}:${run_gid}" "${managed_plugins_dir}"
 }
 
 configure_resource_pack() {
