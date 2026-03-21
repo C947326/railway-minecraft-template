@@ -43,11 +43,12 @@ final class BaronListener implements Listener {
         if (!controller.isBaron(event.getEntity())) {
             return;
         }
-        event.setCancelled(true);
         final Player attacker = resolveAttacker(event.getDamager());
         if (attacker != null) {
             controller.handleDamage(event.getEntity(), attacker, plugin.currentTick());
+            return;
         }
+        event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

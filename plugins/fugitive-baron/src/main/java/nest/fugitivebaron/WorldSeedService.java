@@ -244,6 +244,16 @@ final class WorldSeedService {
             .build();
     }
 
+    Component fullResetAndSeed(final boolean spawnBaron) {
+        controller.despawnBaron();
+        hideoutService.clearLocationOverride("antenna_nest");
+        seedStateRepository.resetAllState();
+        viceSites.clear();
+        final Component result = seedAll(spawnBaron);
+        plugin.debugLog("Performed full Baron reset and reseed" + (spawnBaron ? " with John spawn." : "."));
+        return Component.text("Full reset complete. ", NamedTextColor.GREEN).append(result);
+    }
+
     Component seedViceSites() {
         final World world = plugin.getServer().getWorlds().isEmpty() ? null : plugin.getServer().getWorlds().getFirst();
         if (world == null) {
@@ -529,6 +539,7 @@ final class WorldSeedService {
         painter.set(world.getBlockAt(baseX + 3, baseY, baseZ + 11), Material.SCAFFOLDING);
         painter.set(world.getBlockAt(baseX + 5, baseY, baseZ + 11), Material.SCAFFOLDING);
         painter.set(world.getBlockAt(baseX + 4, baseY + 2, baseZ + 10), Material.LANTERN);
+        seedAntennaEscapeRoute(world, baseX, baseY, baseZ);
 
         for (int x = 0; x < 9; x++) {
             for (int z = 0; z < 11; z++) {
@@ -586,6 +597,25 @@ final class WorldSeedService {
         painter.set(world.getBlockAt(baseX + 2, baseY + 1, baseZ + 10), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 8, baseY + 1, baseZ + 5), Material.LANTERN);
         painter.set(world.getBlockAt(baseX + 0, baseY + 1, baseZ + 5), Material.LANTERN);
+    }
+
+    private void seedAntennaEscapeRoute(final World world, final int baseX, final int baseY, final int baseZ) {
+        final int centerX = baseX + 4;
+        final int startZ = baseZ + 12;
+
+        for (int step = 0; step < 10; step++) {
+            final int z = startZ + step;
+            final int groundY = world.getHighestBlockYAt(centerX, z);
+            final int pathY = Math.min(baseY - 1, groundY);
+
+            for (int width = -1; width <= 1; width++) {
+                final int x = centerX + width;
+                for (int clearY = pathY + 1; clearY <= pathY + 3; clearY++) {
+                    painter.set(world.getBlockAt(x, clearY, z), Material.AIR);
+                }
+                painter.set(world.getBlockAt(x, pathY, z), step < 4 ? Material.COBBLESTONE_STAIRS : Material.COBBLESTONE);
+            }
+        }
     }
 
     private Location findBoardLocation(final Location center) {

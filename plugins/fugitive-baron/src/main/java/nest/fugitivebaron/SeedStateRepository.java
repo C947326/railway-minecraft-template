@@ -189,6 +189,16 @@ final class SeedStateRepository {
         return reset;
     }
 
+    void resetAllState() {
+        config.set("seed-version", SEED_VERSION);
+        config.set("hunt", null);
+        config.set("antenna-nest", null);
+        config.set("rumor-boards", null);
+        config.set("vice-sites", null);
+        config.set("discoveries", null);
+        save();
+    }
+
     private String key(final Location location) {
         final String world = location.getWorld() == null ? "unknown" : location.getWorld().getName();
         return world + ":" + location.getBlockX() + ":" + location.getBlockY() + ":" + location.getBlockZ();

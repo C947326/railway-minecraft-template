@@ -40,11 +40,21 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
         @NotNull final String[] args
     ) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /fugitivebaron <spawn|despawn|item|radar [reset [player]|resetall]|hideout|seed|reload>", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /fugitivebaron <resetall [spawn]|spawn|despawn|item|radar [reset [player]|resetall]|hideout|seed|reload>", NamedTextColor.RED));
             return true;
         }
 
         switch (args[0].toLowerCase()) {
+            case "resetall" -> {
+                final boolean spawnBaron = args.length >= 2 && "spawn".equalsIgnoreCase(args[1]);
+                final int resetRadars = plugin.resetAllPlayerRadars();
+                sender.sendMessage(worldSeedService.fullResetAndSeed(spawnBaron));
+                sender.sendMessage(Component.text(
+                    "Reset and reissued Brothel Radars for " + resetRadars + " online player(s).",
+                    NamedTextColor.GREEN
+                ));
+                return true;
+            }
             case "spawn" -> {
                 try {
                     final LivingEntity baron = controller.spawnBaronAtActiveHideout();
@@ -180,7 +190,10 @@ final class BaronCommand implements CommandExecutor, TabCompleter {
         @NotNull final String[] args
     ) {
         if (args.length == 1) {
-            return List.of("spawn", "despawn", "item", "radar", "hideout", "seed", "reload");
+            return List.of("resetall", "spawn", "despawn", "item", "radar", "hideout", "seed", "reload");
+        }
+        if (args.length == 2 && "resetall".equalsIgnoreCase(args[0])) {
+            return List.of("spawn");
         }
         if (args.length == 2 && "radar".equalsIgnoreCase(args[0])) {
             return List.of("reset", "resetall");

@@ -57,7 +57,7 @@ final class CitizensBaronSupport {
         despawnBaron();
 
         final NPC npc = registry.createNPC(EntityType.PLAYER, displayName);
-        npc.setProtected(true);
+        npc.setProtected(false);
         npc.getOrAddTrait(GameModeTrait.class).setGameMode(GameMode.SURVIVAL);
         npc.getOrAddTrait(SkinLayers.class).show();
 

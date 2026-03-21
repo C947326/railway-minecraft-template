@@ -8,7 +8,7 @@ softdepend: [Citizens]
 commands:
   fugitivebaron:
     description: Spawn or remove the fugitive baron NPC.
-    usage: /fugitivebaron <spawn|despawn|item|radar [reset [player]|resetall]|hideout|seed|reload>
+    usage: /fugitivebaron <resetall [spawn]|spawn|despawn|item|radar [reset [player]|resetall]|hideout|seed|reload>
     permission: fugitivebaron.admin
 permissions:
   fugitivebaron.admin:

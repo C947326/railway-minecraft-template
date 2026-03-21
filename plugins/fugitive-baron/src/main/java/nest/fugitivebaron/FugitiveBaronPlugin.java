@@ -114,6 +114,10 @@ public final class FugitiveBaronPlugin extends JavaPlugin {
         }
     }
 
+    int resetAllPlayerRadars() {
+        return radarService.resetRadarsForOnlinePlayers();
+    }
+
     NamespacedKey baronKey() {
         return baronKey;
     }

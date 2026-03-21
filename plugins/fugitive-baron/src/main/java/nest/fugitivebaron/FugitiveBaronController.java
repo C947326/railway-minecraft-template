@@ -9,6 +9,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -112,17 +113,18 @@ final class FugitiveBaronController {
     LivingEntity spawnBaron(final Location location) {
         Objects.requireNonNull(location.getWorld(), "Spawn world cannot be null.");
         sweepAllBarons();
+        final Location spawnLocation = safeSpawnLocation(location);
 
         if (hasCitizensSupport()) {
             try {
                 if (citizensSupport.isPreferredAndAvailable()) {
-                    final LivingEntity citizensBaron = citizensSupport.spawnBaron(location, displayName);
+                    final LivingEntity citizensBaron = citizensSupport.spawnBaron(spawnLocation, displayName);
                     this.baronId = citizensBaron.getUniqueId();
                     this.state = BaronState.IDLE;
                     this.currentTargetId = null;
                     this.lastInteractionTick = 0L;
                     this.fleeUntilTick = 0L;
-                    plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(location));
+                    plugin.debugLog("Spawned Citizens-backed John at " + formatLocation(spawnLocation));
                     return citizensBaron;
                 }
             } catch (final Throwable throwable) {
@@ -131,7 +133,7 @@ final class FugitiveBaronController {
         }
 
         final EntityType type = parseEntityType();
-        final Entity entity = location.getWorld().spawnEntity(location, type);
+        final Entity entity = spawnLocation.getWorld().spawnEntity(spawnLocation, type);
         if (!(entity instanceof LivingEntity livingEntity)) {
             entity.remove();
             throw new IllegalStateException("Configured entity type must be living.");
@@ -162,7 +164,7 @@ final class FugitiveBaronController {
         this.currentTargetId = null;
         this.lastInteractionTick = 0L;
         this.fleeUntilTick = 0L;
-        plugin.debugLog("Spawned Baron at " + formatLocation(location));
+        plugin.debugLog("Spawned Baron at " + formatLocation(spawnLocation));
 
         return livingEntity;
     }
@@ -171,6 +173,10 @@ final class FugitiveBaronController {
         final Location location = hideoutService.activeHideoutLocation();
         if (location == null) {
             throw new IllegalStateException("Active hideout location is not available.");
+        }
+        final String hideoutId = hideoutService.activeHideoutId();
+        if ("antenna_nest".equalsIgnoreCase(hideoutId)) {
+            return spawnBaron(location.clone().add(0.0D, 0.0D, 3.0D));
         }
         return spawnBaron(location);
     }
@@ -453,9 +459,6 @@ final class FugitiveBaronController {
             tryMove(mob, destination, speed);
         }
 
-        if (isCitizensBaron(baron)) {
-            return;
-        }
         final Vector movement = away.normalize().multiply(speed);
         movement.setY(baron.getVelocity().getY());
         baron.setVelocity(movement);
@@ -547,6 +550,29 @@ final class FugitiveBaronController {
 
     private float speedModifier(final double speed) {
         return (float) Math.max(1.0D, speed * 4.0D);
+    }
+
+    private Location safeSpawnLocation(final Location source) {
+        final Location spawn = source.clone();
+        spawn.setX(Math.floor(source.getX()) + 0.5D);
+        spawn.setZ(Math.floor(source.getZ()) + 0.5D);
+
+        final World world = spawn.getWorld();
+        if (world == null) {
+            return spawn;
+        }
+
+        for (int offset = 0; offset <= 6; offset++) {
+            final Location candidate = spawn.clone().add(0.0D, offset + 1.0D, 0.0D);
+            final Block feet = world.getBlockAt(candidate);
+            final Block head = feet.getRelative(0, 1, 0);
+            if (!feet.getType().isSolid() && !head.getType().isSolid()) {
+                return candidate;
+            }
+        }
+
+        spawn.setY(source.getY() + 1.0D);
+        return spawn;
     }
 
     private Player fleeingAggressor(final World world, final long currentTick) {

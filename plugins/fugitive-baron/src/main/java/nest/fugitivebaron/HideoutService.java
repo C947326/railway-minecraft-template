@@ -226,6 +226,13 @@ final class HideoutService {
         locationOverrides.put(hideoutId, location.clone());
     }
 
+    void clearLocationOverride(final String hideoutId) {
+        if (hideoutId == null) {
+            return;
+        }
+        locationOverrides.remove(hideoutId);
+    }
+
     Location locationForId(final String hideoutId) {
         return hideouts.stream()
             .filter(hideout -> hideout.id().equalsIgnoreCase(hideoutId))

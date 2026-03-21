@@ -96,6 +96,15 @@ final class DragonRadarService {
         updatePlayerRadar(player);
     }
 
+    int resetRadarsForOnlinePlayers() {
+        int reset = 0;
+        for (final Player player : plugin.getServer().getOnlinePlayers()) {
+            resetPlayerRadar(player);
+            reset++;
+        }
+        return reset;
+    }
+
     boolean isDragonRadar(final ItemStack stack) {
         if (stack == null || stack.getType() != Material.COMPASS) {
             return false;
@@ -105,6 +114,22 @@ final class DragonRadarService {
             return false;
         }
         return meta.getPersistentDataContainer().has(plugin.radarKey(), PersistentDataType.BYTE);
+    }
+
+    private void resetPlayerRadar(final Player player) {
+        final PlayerInventory inventory = player.getInventory();
+        final ItemStack[] contents = inventory.getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            if (isDragonRadar(contents[slot])) {
+                inventory.setItem(slot, null);
+            }
+        }
+        if (isDragonRadar(inventory.getItemInOffHand())) {
+            inventory.setItemInOffHand(null);
+        }
+        player.getPersistentDataContainer().remove(plugin.receivedRadarKey());
+        ensurePlayerHasStarterRadar(player);
+        updatePlayerRadar(player);
     }
 
     private void updatePlayerRadar(final Player player) {
